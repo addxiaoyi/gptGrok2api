@@ -46,19 +46,45 @@ func BuildImagineRequest(requestID, prompt, aspectRatio string, enableNSFW, enab
 
 var mediaFileIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{16,64}$`)
 
+// standardImageSizes are the pixel resolutions the Grok image models can
+// produce. The upstream aspect_ratio field only carries the ratio, so the
+// pixel size stays a local API contract.
+var standardImageSizes = map[string]string{
+	"512x512":   "1:1",
+	"1024x1024": "1:1",
+	"1792x1024": "3:2",
+	"1024x1792": "2:3",
+}
+
+// standardImageSizeError names the pixel sizes callers may accept.
+var standardImageSizeError = "size must be one of 512x512, 1024x1024, 1792x1024, 1024x1792"
+
+// StandardImageSize maps a supported pixel size to the upstream aspect ratio.
+// Unknown values report false so handlers can reject them with a stable
+// error message instead of leaking them to the generation pipeline.
+func StandardImageSize(size string) (string, bool) {
+	if ratio, ok := standardImageSizes[strings.TrimSpace(strings.ToLower(size))]; ok {
+		return ratio, true
+	}
+	return "", false
+}
+
+// ValidImageSize reports whether the value is one of the standard pixel sizes.
+func ValidImageSize(size string) bool {
+	_, ok := StandardImageSize(size)
+	return ok
+}
+
 func AspectRatio(size string) (string, bool) {
 	switch strings.TrimSpace(strings.ToLower(size)) {
 	case "1280x720", "16:9":
 		return "16:9", true
 	case "720x1280", "9:16":
 		return "9:16", true
-	case "1792x1024", "3:2":
-		return "3:2", true
-	case "1024x1792", "2:3":
-		return "2:3", true
-	case "1024x1024", "1:1":
-		return "1:1", true
 	default:
+		if ratio, ok := StandardImageSize(size); ok {
+			return ratio, true
+		}
 		return "", false
 	}
 }

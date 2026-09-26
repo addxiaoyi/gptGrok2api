@@ -16,14 +16,15 @@ import (
 
 func testConfig() config.Config {
 	return config.Config{
-		RootDir:      ".",
-		DataDir:      "data",
-		StaticDir:    "web_dist",
-		ConfigPath:   "config.json",
-		AuthKeysPath: "data/auth_keys.json",
-		APIKey:       "api-secret",
-		AdminKey:     "admin-secret",
-		Version:      "test",
+		RootDir:            ".",
+		DataDir:            "data",
+		StaticDir:          "web_dist",
+		ConfigPath:         "config.json",
+		AuthKeysPath:       "data/auth_keys.json",
+		APIKey:             "api-secret",
+		AdminKey:           "admin-secret",
+		Version:            "test",
+		ImageMaxReferences: 7,
 	}
 }
 

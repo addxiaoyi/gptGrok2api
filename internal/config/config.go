@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// maxImageReferenceLimit caps the reference image setting so a typo cannot
+// enable a request size the upstream asset uploader cannot serve.
+const maxImageReferenceLimit = 32
+
 type Config struct {
 	RootDir                string
 	ListenAddr             string
@@ -72,6 +76,7 @@ type Config struct {
 	ChatRetryCodes         map[int]bool
 	ImageAccountLimit      int
 	ImageMaxConcurrency    int
+	ImageMaxReferences     int
 	ImageRetentionDays     int
 	ImageCleanupInterval   time.Duration
 }
@@ -136,6 +141,13 @@ func Load(root string) (Config, error) {
 	}
 	if imageMaxConcurrency > 1024 {
 		imageMaxConcurrency = 1024
+	}
+	imageMaxReferences := envInt("GO_IMAGE_MAX_REFERENCES", 7)
+	if imageMaxReferences < 1 {
+		imageMaxReferences = 1
+	}
+	if imageMaxReferences > 32 {
+		imageMaxReferences = 32
 	}
 	imageRetentionDays := envInt("GO_IMAGE_RETENTION_DAYS", 1)
 	if imageRetentionDays < 1 {
@@ -209,6 +221,7 @@ func Load(root string) (Config, error) {
 		ChatRetryCodes:         parseStatusCodes(env("GO_CHAT_RETRY_CODES", "401,403,429,500,502,503,504")),
 		ImageAccountLimit:      imageAccountConcurrency,
 		ImageMaxConcurrency:    imageMaxConcurrency,
+		ImageMaxReferences:     imageMaxReferences,
 		ImageRetentionDays:     imageRetentionDays,
 		ImageCleanupInterval:   time.Duration(imageCleanupIntervalSeconds) * time.Second,
 	}
@@ -244,9 +257,28 @@ func Load(root string) (Config, error) {
 	if cfg.APIKey == "" && cfg.AdminKey != "" {
 		cfg.APIKey = cfg.AdminKey
 	}
+	applyImageReferenceLimit(&cfg, rawConfig)
 	applyProxyConfig(&cfg, rawConfig)
 
 	return cfg, nil
+}
+
+// applyImageReferenceLimit lets config.json widen or narrow the reference image
+// cap. The environment variable still wins so container deployments stay
+// authoritative.
+func applyImageReferenceLimit(cfg *Config, values map[string]any) {
+	if strings.TrimSpace(os.Getenv("GO_IMAGE_MAX_REFERENCES")) != "" {
+		return
+	}
+	raw, ok := values["image_max_references"]
+	if !ok {
+		return
+	}
+	limit := configInt(raw)
+	if limit < 1 || limit > maxImageReferenceLimit {
+		return
+	}
+	cfg.ImageMaxReferences = limit
 }
 
 func applyProxyConfig(cfg *Config, values map[string]any) {

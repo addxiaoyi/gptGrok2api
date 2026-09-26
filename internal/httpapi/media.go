@@ -759,8 +759,13 @@ func (s *Server) imageEdits(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "at least one image is required", "invalid_request_error")
 		return
 	}
-	if len(inputs) > 7 {
-		inputs = inputs[len(inputs)-7:]
+	maxReferences := s.cfg.ImageMaxReferences
+	if maxReferences < 1 {
+		maxReferences = 7
+	}
+	if len(inputs) > maxReferences {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("too many reference images: got %d, maximum allowed is %d", len(inputs), maxReferences), "invalid_request_error")
+		return
 	}
 	if isOpenAIImageModel(modelName) {
 		size := strings.TrimSpace(request.Size)
