@@ -269,7 +269,7 @@ func (vm *sentinelVM) install() {
 		return nil
 	})
 	vm.values[float64(30)] = sentinelCallable(func(args ...any) any {
-		if len(args) < 3 {
+		if len(args) < 4 {
 			return nil
 		}
 		if captured, ok := args[3].([]any); ok {
