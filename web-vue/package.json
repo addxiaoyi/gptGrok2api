@@ -8,7 +8,9 @@
     "clean:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean:dist && tsc && vite build",
     "build:server": "npm run build && node -e \"const fs = require('fs'); fs.rmSync('../web_dist', { recursive: true, force: true }); fs.cpSync('dist', '../web_dist', { recursive: true })\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@iconify/vue": "^5.0.0",
@@ -18,7 +20,8 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
-    "vite": "^7.3.2"
+    "vite": "^7.3.2",
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.6",
