@@ -30,6 +30,68 @@ func TestAuthKeyLifecycleKeepsPrivateHashOutOfPublicPayload(t *testing.T) {
 	}
 }
 
+func TestAddAccountsWithinBatchDeduplicatesOnToken(t *testing.T) {
+	root := t.TempDir()
+	repository := New(filepath.Join(root, "accounts.json"), filepath.Join(root, "auth_keys.json"), filepath.Join(root, "config.json"))
+
+	// 同一 token 同时出现在 payloads 与 tokens 里，batch 内只计一次。
+	added, skipped, items, err := repository.AddAccounts(
+		[]string{"dup-token", "new-token"},
+		[]map[string]any{
+			{"access_token": "dup-token", "email": "dup@example.test"},
+			{"accessToken": "alt-key-token"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 1 {
+		t.Fatalf("expected one in-batch skip, got %d", skipped)
+	}
+	// payloads 的 2 个 + tokens 里新增的 1 个 = 3 个账号
+	if added != 3 || len(items) != 3 {
+		t.Fatalf("expected 3 stored accounts, added=%d items=%#v", added, items)
+	}
+
+	// 第二批命中已存在的 token，仍应去重。
+	added, skipped, items, err = repository.AddAccounts(
+		[]string{"dup-token"},
+		[]map[string]any{{"access_token": "dup-token"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added != 0 || skipped != 2 {
+		t.Fatalf("expected no adds and 2 skips, got added=%d skipped=%d", added, skipped)
+	}
+	if len(items) != 3 {
+		t.Fatalf("stored count drifted: %d", len(items))
+	}
+}
+
+func TestAddAccountsNormalizesAltKeyTokenToCanonical(t *testing.T) {
+	root := t.TempDir()
+	accountPath := filepath.Join(root, "accounts.json")
+	repository := New(accountPath, filepath.Join(root, "auth_keys.json"), filepath.Join(root, "config.json"))
+
+	_, _, _, err := repository.AddAccounts(nil, []map[string]any{{"accessToken": "alt-token"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// accessToken 应被规范化为 access_token 落盘
+	raw, err := os.ReadFile(accountPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("invalid stored JSON: %v", err)
+	}
+	if len(decoded) != 1 || decoded[0]["access_token"] != "alt-token" {
+		t.Fatalf("alt key token was not normalized to access_token: %#v", decoded)
+	}
+}
+
 func TestAccountStoragePreservesJSONCompatibleFields(t *testing.T) {
 	root := t.TempDir()
 	accountPath := filepath.Join(root, "accounts.json")
