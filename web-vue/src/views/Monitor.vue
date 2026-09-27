@@ -250,6 +250,7 @@ import StateBlock from '@/components/ai/StateBlock.vue'
 import TableShell from '@/components/ai/TableShell.vue'
 import { usePageQuery, useSerialVisibilityPolling } from '@/composables/usePageQuery'
 import { usePageRuntime } from '@/composables/usePageRuntime'
+import { clampInt } from '@/lib/numbers'
 import MonitorActiveRow from '@/views/monitor/MonitorActiveRow.vue'
 import MonitorEventRow from '@/views/monitor/MonitorEventRow.vue'
 import MonitorRecentRow from '@/views/monitor/MonitorRecentRow.vue'
@@ -363,9 +364,7 @@ function toggleAutoRefresh() {
 }
 
 function clampRefreshInterval(value: unknown) {
-  const seconds = Math.round(Number(value || DEFAULT_REFRESH_INTERVAL_SECONDS))
-  if (!Number.isFinite(seconds)) return DEFAULT_REFRESH_INTERVAL_SECONDS
-  return Math.min(MAX_REFRESH_INTERVAL_SECONDS, Math.max(MIN_REFRESH_INTERVAL_SECONDS, seconds))
+  return clampInt(value, MIN_REFRESH_INTERVAL_SECONDS, MAX_REFRESH_INTERVAL_SECONDS, DEFAULT_REFRESH_INTERVAL_SECONDS)
 }
 
 function readStoredRefreshInterval() {

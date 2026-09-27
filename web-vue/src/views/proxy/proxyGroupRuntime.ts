@@ -4,6 +4,7 @@ import { proxyApi, type ProxyGroup, type ProxyNode, type ProxyTestResult } from 
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { errorMessage } from '@/lib/errorMessage'
+import { clampInt } from '@/lib/numbers'
 import {
   proxyGroupActionItems as buildProxyGroupActionItems,
   proxyGroupReference,
@@ -56,9 +57,7 @@ export function normalizeGroupId(value: string) {
 }
 
 export function normalizeImageConcurrencyLimit(value: unknown) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return 0
-  return Math.max(0, Math.min(10000, Math.floor(parsed)))
+  return clampInt(value, 0, 10000)
 }
 
 function createDefaultNode(index = 0): ProxyNode {

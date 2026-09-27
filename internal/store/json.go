@@ -329,40 +329,39 @@ func (s *Store) AddAccounts(tokens []string, payloads []map[string]any) (int, in
 		}
 	}
 	added, skipped := 0, 0
-	for _, payload := range payloads {
-		token := accountToken(payload)
+	// 去重语义只在一处实现：命中 byToken 即计入 skipped，
+	// 未命中则追加并回填索引，payloads 与 tokens 共用同一条路径。
+	appendAccount := func(token string, build func() map[string]any) {
 		if token == "" {
-			continue
+			return
 		}
 		if _, ok := byToken[token]; ok {
 			skipped++
-			continue
+			return
 		}
-		item := cloneMap(payload)
-		normalizeAccount(item)
-		accounts = append(accounts, item)
+		accounts = append(accounts, build())
 		byToken[token] = len(accounts) - 1
 		added++
 	}
+	for _, payload := range payloads {
+		token := accountToken(payload)
+		appendAccount(token, func() map[string]any {
+			item := cloneMap(payload)
+			normalizeAccount(item)
+			return item
+		})
+	}
 	for _, rawToken := range tokens {
 		token := strings.TrimSpace(rawToken)
-		if token == "" {
-			continue
-		}
-		if _, ok := byToken[token]; ok {
-			skipped++
-			continue
-		}
-		item := map[string]any{
-			"access_token": token,
-			"status":       "正常",
-			"source_type":  "web",
-			"enabled":      true,
-			"created_at":   time.Now().UTC().Format(time.RFC3339),
-		}
-		accounts = append(accounts, item)
-		byToken[token] = len(accounts) - 1
-		added++
+		appendAccount(token, func() map[string]any {
+			return map[string]any{
+				"access_token": token,
+				"status":       "正常",
+				"source_type":  "web",
+				"enabled":      true,
+				"created_at":   time.Now().UTC().Format(time.RFC3339),
+			}
+		})
 	}
 	if added > 0 {
 		if err := writeJSON(s.accountsPath, accounts); err != nil {

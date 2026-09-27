@@ -1073,6 +1073,7 @@ import { useGrokAccountsPage } from './accounts/useGrokAccountsPage'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { errorMessage } from '@/lib/errorMessage'
+import { toNonNegativeInt, toOptionalNonNegativeInt } from '@/lib/numbers'
 import {
   accountGroupLabel as buildAccountGroupLabel,
   accountGroupNameMap as buildAccountGroupNameMap,
@@ -1368,14 +1369,12 @@ const grokQuotaMetricLabels: Record<GrokQuotaMode, string> = {
 }
 
 function safeMetricNumber(value: unknown): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0
+  return toNonNegativeInt(value)
 }
 
 function optionalMetricNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : null
+  return toOptionalNonNegativeInt(value)
 }
 
 const grokMetricItems = computed(() => {

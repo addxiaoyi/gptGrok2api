@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { accountsApi, normalizeAccountBackendStatus, type Account, type AccountBackendStatus } from '@/api/accounts'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
+import { toOptionalNonNegativeInt } from '@/lib/numbers'
 
 export type AccountForm = {
   id: string
@@ -51,10 +52,7 @@ function createDefaultForm(): AccountForm {
 }
 
 function normalizeQuota(value: unknown): number | undefined {
-  const raw = String(value ?? '').trim()
-  if (!raw) return undefined
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : undefined
+  return toOptionalNonNegativeInt(String(value ?? '').trim() || undefined)
 }
 
 export function useAccountCrudRuntime(options: AccountCrudRuntimeOptions) {
