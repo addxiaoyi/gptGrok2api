@@ -9,6 +9,9 @@
           <MetaChip v-if="registerConfig" size="sm" :tone="autosaveTone" :title="autosaveMessage">
             {{ autosaveLabel }}
           </MetaChip>
+          <Button size="sm" variant="outline" @click="openGrokRegister">
+            Grok 注册机
+          </Button>
         </template>
       </PanelHeader>
 
@@ -200,6 +203,10 @@ const pageRuntime = usePageRuntime('register')
 const grokExportBusy = ref(false)
 const checkoutRetryStopping = ref(false)
 const checkoutHistoryClearing = ref(false)
+
+function openGrokRegister() {
+  router.push({ name: 'grok-register' })
+}
 
 const registerConfigRuntime = useRegisterConfigRuntime({
   runtime: pageRuntime,

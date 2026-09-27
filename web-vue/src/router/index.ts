@@ -56,6 +56,12 @@ const router = createRouter({
           meta: { adminOnly: true },
         },
         {
+          path: 'grok-register',
+          name: 'grok-register',
+          component: () => import('@/views/GrokRegister.vue'),
+          meta: { adminOnly: true },
+        },
+        {
           path: 'icloud',
           name: 'icloud',
           component: () => import('@/views/ICloudPrivacyMail.vue'),
