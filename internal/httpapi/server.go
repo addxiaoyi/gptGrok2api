@@ -77,9 +77,12 @@ type Server struct {
 	survivalStatus     map[string]any
 	survivalRunning    bool
 	survivalWake       chan struct{}
-	probeStop          chan struct{}
-	probeWake          chan struct{}
-	proxyProbeURL      string
+	// shutdown 通知所有后台 goroutine 退出。
+	shutdown      chan struct{}
+	shutdownOnce  sync.Once
+	probeStop     chan struct{}
+	probeWake     chan struct{}
+	proxyProbeURL string
 }
 
 func New(cfg config.Config) *Server {
@@ -102,7 +105,7 @@ func New(cfg config.Config) *Server {
 	}
 	server := &Server{
 		cfg:                cfg,
-		auth:               auth.New(cfg.APIKey, cfg.AdminKey, cfg.AuthKeysPath, cfg.AllowAnonymous, repository),
+		auth:               auth.NewWithOptions(cfg.APIKey, cfg.AdminKey, cfg.AuthKeysPath, cfg.AllowAnonymous, repository, auth.Options{}),
 		store:              repository,
 		catalog:            model.Catalog(),
 		client:             &http.Client{Timeout: 0},
@@ -125,6 +128,7 @@ func New(cfg config.Config) *Server {
 		refreshProgress:    map[string]*accountRefreshProgress{},
 		survivalStatus:     map[string]any{"running": false, "last_started_at": "", "last_finished_at": "", "last_error": "", "last_summary": map[string]any{}, "next_run_at": ""},
 		survivalWake:       make(chan struct{}, 1),
+		shutdown:           make(chan struct{}),
 		probeStop:          make(chan struct{}),
 		probeWake:          make(chan struct{}, 1),
 		oauthStore:         oauth.NewStore(cfg.OAuthPath, firstNonEmpty(cfg.AdminKey, cfg.APIKey, "gptgrok2api")),
@@ -159,6 +163,18 @@ func New(cfg config.Config) *Server {
 		go server.openAISurvivalScheduler()
 	}
 	return server
+}
+
+// Shutdown 停止所有后台 goroutine（scheduler + task queue worker）。
+// 重复调用安全。
+func (s *Server) Shutdown() {
+	if s == nil {
+		return
+	}
+	s.shutdownOnce.Do(func() {
+		close(s.shutdown)
+		s.taskQueue.Stop()
+	})
 }
 
 func runtimeProxyGroups(groups []config.ProxyGroup) []proxyruntime.GroupConfig {
@@ -378,7 +394,11 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key, X-Admin-Key")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {

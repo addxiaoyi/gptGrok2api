@@ -18,16 +18,28 @@ type Validator struct {
 	adminKey       string
 	authKeysPath   string
 	allowAnonymous bool
-	repository     *store.Store
+	// allowQueryAdmin 开启后 app_key query 参数才可作为管理凭据。
+	// query 会写进代理/浏览器历史，默认关闭；仅 SSE 这类无法自定义 header 的场景需要显式打开。
+	allowQueryAdmin bool
+	repository       *store.Store
 }
 
 func New(apiKey, adminKey, authKeysPath string, allowAnonymous bool, repository *store.Store) *Validator {
+	return NewWithOptions(apiKey, adminKey, authKeysPath, allowAnonymous, repository, Options{})
+}
+
+type Options struct {
+	AllowQueryAdmin bool
+}
+
+func NewWithOptions(apiKey, adminKey, authKeysPath string, allowAnonymous bool, repository *store.Store, opts Options) *Validator {
 	return &Validator{
-		apiKey:         strings.TrimSpace(apiKey),
-		adminKey:       strings.TrimSpace(adminKey),
-		authKeysPath:   authKeysPath,
-		allowAnonymous: allowAnonymous,
-		repository:     repository,
+		apiKey:          strings.TrimSpace(apiKey),
+		adminKey:        strings.TrimSpace(adminKey),
+		authKeysPath:    authKeysPath,
+		allowAnonymous:  allowAnonymous,
+		allowQueryAdmin: opts.AllowQueryAdmin,
+		repository:      repository,
 	}
 }
 
@@ -45,7 +57,10 @@ func (v *Validator) AdminKey(r *http.Request) string {
 	if token := v.APIKey(r); token != "" {
 		return token
 	}
-	return strings.TrimSpace(r.URL.Query().Get("app_key"))
+	if v.allowQueryAdmin {
+		return strings.TrimSpace(r.URL.Query().Get("app_key"))
+	}
+	return ""
 }
 
 func (v *Validator) ValidAPIRequest(r *http.Request) bool {

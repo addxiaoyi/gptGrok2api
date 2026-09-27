@@ -24,6 +24,7 @@ type RedisQueue struct {
 	prefix   string
 	mu       sync.Mutex
 	handlers map[string]func(*Task) (map[string]any, error)
+	stop     chan struct{}
 }
 
 func NewRedis(addr, password string, database int, prefix string) *RedisQueue {
@@ -36,7 +37,7 @@ func NewRedis(addr, password string, database int, prefix string) *RedisQueue {
 	if strings.TrimSpace(prefix) == "" {
 		prefix = "gptgrok2api"
 	}
-	return &RedisQueue{addr: addr, password: password, database: database, prefix: prefix, handlers: map[string]func(*Task) (map[string]any, error){}}
+	return &RedisQueue{addr: addr, password: password, database: database, prefix: prefix, handlers: map[string]func(*Task) (map[string]any, error){}, stop: make(chan struct{})}
 }
 
 func (q *RedisQueue) Ping() error {
@@ -59,6 +60,17 @@ func (q *RedisQueue) Start(workers int) {
 	q.recoverRunning()
 	for i := 0; i < workers; i++ {
 		go q.worker()
+	}
+}
+
+// Stop 让所有 worker 退出。重复调用安全。
+func (q *RedisQueue) Stop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	select {
+	case <-q.stop:
+	default:
+		close(q.stop)
 	}
 }
 
@@ -135,10 +147,21 @@ func (q *RedisQueue) List() []Task {
 
 func (q *RedisQueue) worker() {
 	for {
+		select {
+		case <-q.stop:
+			return
+		default:
+		}
+		// BLPOP 阻塞 5s，期间若 Stop 被调用，下一次循环 select 会退出
 		raw, err := q.command(context.Background(), "BLPOP", q.queueKey(), "5")
 		if err != nil {
-			time.Sleep(time.Second)
-			continue
+			select {
+			case <-q.stop:
+				return
+			default:
+				time.Sleep(time.Second)
+				continue
+			}
 		}
 		values, ok := raw.([]any)
 		if !ok || len(values) < 2 {

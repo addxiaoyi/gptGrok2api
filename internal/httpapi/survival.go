@@ -96,6 +96,9 @@ func (s *Server) openAISurvivalScheduler() {
 	case <-timer.C:
 	case <-s.survivalWake:
 		timer.Stop()
+	case <-s.shutdown:
+		timer.Stop()
+		return
 	}
 	for {
 		config := mapValue(s.registerStore.Get()["openai_survival"])
@@ -125,6 +128,9 @@ func (s *Server) openAISurvivalScheduler() {
 		select {
 		case <-s.survivalWake:
 			timer.Stop()
+		case <-s.shutdown:
+			timer.Stop()
+			return
 		case <-timer.C:
 		}
 	}

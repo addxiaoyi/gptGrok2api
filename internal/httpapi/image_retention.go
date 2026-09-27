@@ -24,8 +24,13 @@ func (s *Server) imageRetentionScheduler() {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	for range ticker.C {
-		cleanup()
+	for {
+		select {
+		case <-s.shutdown:
+			return
+		case <-ticker.C:
+			cleanup()
+		}
 	}
 }
 
