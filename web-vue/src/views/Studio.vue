@@ -619,7 +619,7 @@ async function downloadPreviewImage() {
   try {
     await downloadUrlAsFile(previewImage.src, previewImage.name || 'image.png', { localPath: previewImage.localPath })
     toast.success('已开始下载')
-  } catch (error: any) {
+  } catch (error) {
     toast.error(`下载失败：${error.message || '无法读取图片文件'}`)
   }
 }

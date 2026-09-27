@@ -1,4 +1,5 @@
 import { getAuthToken } from '@/api/client'
+import { errorMessage } from '@/lib/errorMessage'
 
 const apiBaseUrl = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 
@@ -126,7 +127,7 @@ export async function downloadUrlAsFile(
   try {
     const blob = await fetchBlob(value)
     saveBlob(blob, filename, value)
-  } catch (error: any) {
-    throw new Error(error?.message || 'image source is not readable by the browser')
+  } catch (error) {
+    throw new Error(errorMessage(error, 'image source is not readable by the browser'))
   }
 }

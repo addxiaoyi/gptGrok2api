@@ -2,6 +2,7 @@ import { reactive, ref, type Ref } from 'vue'
 
 import { galleryApi, type GalleryFile, type ImageStorageStats } from '@/api/gallery'
 import { saveBlob } from '@/lib/downloads'
+import { errorMessage } from '@/lib/errorMessage'
 import {
   formatCleanupExpiredMessage,
   formatCleanupTargetMessage,
@@ -133,8 +134,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
       storageActionMessage.value = formatCompressStorageMessage(result)
       options.toast.success(storageActionMessage.value, '压缩完成')
       await Promise.all([refreshStorageStats({ lock: false }), options.loadGallery()])
-    } catch (error: any) {
-      storageActionError.value = error?.message || '压缩图片失败'
+    } catch (error) {
+      storageActionError.value = errorMessage(error, '压缩图片失败')
       options.toast.error(storageActionError.value, '压缩失败')
     } finally {
       isStorageBusy.value = false
@@ -158,8 +159,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
       storageActionMessage.value = formatCleanupExpiredMessage(result)
       options.toast.success(storageActionMessage.value, '清理完成')
       await Promise.all([refreshStorageStats({ lock: false }), options.loadGallery()])
-    } catch (error: any) {
-      storageActionError.value = error?.message || '清理过期图片失败'
+    } catch (error) {
+      storageActionError.value = errorMessage(error, '清理过期图片失败')
       options.toast.error(storageActionError.value, '清理失败')
     } finally {
       isStorageBusy.value = false
@@ -198,8 +199,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
         options.toast.success(storageActionMessage.value, '清理完成')
         await Promise.all([refreshStorageStats({ lock: false }), options.loadGallery()])
       }
-    } catch (error: any) {
-      storageActionError.value = error?.message || '按目标剩余空间清理失败'
+    } catch (error) {
+      storageActionError.value = errorMessage(error, '按目标剩余空间清理失败')
       options.toast.error(storageActionError.value, '清理失败')
     } finally {
       isStorageBusy.value = false
@@ -238,8 +239,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
       }
       options.toast.success(`已删除 ${file.filename}`, '删除成功')
       operationProgress.message = '图片已删除'
-    } catch (error: any) {
-      operationProgress.error = error?.message || '删除图片失败'
+    } catch (error) {
+      operationProgress.error = errorMessage(error, '删除图片失败')
       options.toast.error(operationProgress.error, '删除失败')
     } finally {
       batchBusy.value = false
@@ -274,8 +275,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
       await options.loadGallery()
       options.toast.success(`已删除 ${Number(result.removed || 0)} 张图片。`, '删除成功')
       operationProgress.message = `已删除 ${Number(result.removed || 0)} 张图片`
-    } catch (error: any) {
-      operationProgress.error = error?.message || '批量删除失败'
+    } catch (error) {
+      operationProgress.error = errorMessage(error, '批量删除失败')
       options.toast.error(operationProgress.error, '删除失败')
     } finally {
       batchBusy.value = false
@@ -302,8 +303,8 @@ export function useGalleryOperationsRuntime(options: GalleryOperationsRuntimeOpt
       saveBlob(blob, `images_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`)
       options.toast.success(`已打包 ${paths.length} 张图片。`, '下载已开始')
       operationProgress.message = `已打包 ${paths.length} 张图片`
-    } catch (error: any) {
-      operationProgress.error = error?.message || '批量下载失败'
+    } catch (error) {
+      operationProgress.error = errorMessage(error, '批量下载失败')
       options.toast.error(operationProgress.error, '下载失败')
     } finally {
       batchBusy.value = false

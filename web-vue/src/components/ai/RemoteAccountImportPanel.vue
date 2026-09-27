@@ -544,7 +544,7 @@ async function loadCPAPools() {
     const response = await accountImportsApi.listCPAPools()
     cpaPools.value = Array.isArray(response.pools) ? response.pools : []
     if (!selectedCPAPoolId.value && cpaPools.value.length > 0) selectedCPAPoolId.value = cpaPools.value[0].id
-  } catch (error: any) {
+  } catch (error) {
     cpaPools.value = []
     toast.error(error.message || '加载 CPA 连接失败')
   }
@@ -562,7 +562,7 @@ async function loadCPAFiles() {
     remoteCPAFiles.value = normalized.items
     remoteCPADuplicateCount.value = normalized.duplicates
     selectedCPAFileNames.value = []
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error.message || '加载 CPA 文件失败')
   }
 }
@@ -574,7 +574,7 @@ async function loadSub2APIServers() {
     if (!selectedSub2APIServerId.value && sub2apiServers.value.length > 0) {
       selectedSub2APIServerId.value = sub2apiServers.value[0].id
     }
-  } catch (error: any) {
+  } catch (error) {
     sub2apiServers.value = []
     toast.error(error.message || '加载 Sub2API 连接失败')
   }
@@ -587,7 +587,7 @@ async function loadSub2APIGroups(serverId: string) {
       ...sub2apiGroups.value,
       [serverId]: Array.isArray(response.groups) ? response.groups : [],
     }
-  } catch (error: any) {
+  } catch (error) {
     sub2apiGroups.value = { ...sub2apiGroups.value, [serverId]: [] }
     toast.error(error.message || '加载 Sub2API 分组失败')
   }
@@ -672,7 +672,7 @@ async function loadSub2APIAccounts() {
     sub2apiDuplicateCount.value = normalized.duplicates
     selectedSub2APIAccountIds.value = []
     collapseAllSub2APIGroups()
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error.message || '加载 Sub2API 账号失败')
   }
 }
@@ -814,7 +814,7 @@ async function startCPAImport() {
       const job = await pollImportJob(poolId)
       showImportResult('远程 CPA 导入完成', job)
       emit('imported')
-    } catch (error: any) {
+    } catch (error) {
       toast.error(error.message || '远程 CPA 导入失败')
     }
   })
@@ -864,7 +864,7 @@ async function startSub2APIImport() {
       const job = await pollImportJob(serverId)
       showImportResult('Sub2API 导入完成', job)
       emit('imported')
-    } catch (error: any) {
+    } catch (error) {
       toast.error(error.message || 'Sub2API 导入失败')
     }
   })

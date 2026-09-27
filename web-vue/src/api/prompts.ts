@@ -1,5 +1,6 @@
 import axios, { type Method } from 'axios'
 import { getAuthToken } from './client'
+import { errorMessage } from '@/lib/errorMessage'
 
 export interface PromptLibraryItem {
   id: string
@@ -183,8 +184,8 @@ async function requestPromptApi<T extends object>(
       }
 
       return parsePromptApiJson(text, label, url, contentType) as T
-    } catch (error: any) {
-      const message = String(error?.message || error || '请求失败')
+    } catch (error) {
+      const message = errorMessage(error, '请求失败')
       if (message.includes('请求失败：') || message.includes('请求拿到了 HTML 页面')) throw error
       failures.push({ url, reason: message })
     }

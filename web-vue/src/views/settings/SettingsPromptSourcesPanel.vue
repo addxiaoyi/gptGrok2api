@@ -116,7 +116,7 @@ async function loadSources() {
   try {
     const result = await promptsApi.listSources()
     sources.value = result.sources
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '提示词源读取失败')
   } finally {
     loading.value = false
@@ -131,7 +131,7 @@ async function toggleSource(source: PromptSource, enabled: boolean) {
     sources.value = result.sources
     await reloadStudioPromptLibrary()
     toast.success(enabled ? '提示词源已启用' : '提示词源已停用')
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '提示词源更新失败')
   } finally {
     busySourceId.value = ''
@@ -151,7 +151,7 @@ async function refreshOne(source: PromptSource) {
     } else {
       toast.success('提示词源已更新到本地')
     }
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '提示词源更新失败')
     await loadSources()
   } finally {
@@ -172,7 +172,7 @@ async function refreshAll() {
     } else {
       toast.success('启用词源已更新到本地')
     }
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '提示词源更新失败')
     await loadSources()
   } finally {

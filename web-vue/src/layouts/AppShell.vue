@@ -995,7 +995,7 @@ async function checkForUpdates(showMessage = true) {
       if (isNewerVersion(latestVersionLabel.value, currentVersionLabel.value)) toast.info(message)
       else toast.success(message)
     }
-  } catch (error: any) {
+  } catch (error) {
     updateCheckMessage.value = 'GitHub 版本检查失败，当前展示本地更新日志。'
     if (showMessage) {
       toast.warning(error?.message || 'GitHub 版本检查失败')

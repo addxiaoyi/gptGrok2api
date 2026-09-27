@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { registerApi, type LegacyRegisterConfig } from '@/api/register'
+import { errorMessage } from '@/lib/errorMessage'
 
 export type OutlookResetScope = 'all' | 'retryable' | 'invalid' | 'unused'
 
@@ -56,8 +57,8 @@ export function useRegisterOutlookPoolRuntime(input: RegisterOutlookPoolRuntimeI
       const response = await registerApi.resetOutlookPool(scope)
       input.applyConfig(response.register)
       input.notifySuccess('邮箱池状态已更新')
-    } catch (error: any) {
-      input.notifyError(error?.message || '邮箱池维护失败')
+    } catch (error) {
+      input.notifyError(errorMessage(error, '邮箱池维护失败'))
     } finally {
       input.saving.value = false
     }
@@ -80,8 +81,8 @@ export function useRegisterOutlookPoolRuntime(input: RegisterOutlookPoolRuntimeI
       const response = await registerApi.retrySelectedOutlookMailboxes(providerId, selected)
       input.applyConfig(response.register)
       input.notifySuccess(`已启动 ${selected.length} 个所选邮箱的重试任务`)
-    } catch (error: any) {
-      input.notifyError(error?.message || '重试临时失败邮箱失败')
+    } catch (error) {
+      input.notifyError(errorMessage(error, '重试临时失败邮箱失败'))
     } finally {
       input.saving.value = false
     }
