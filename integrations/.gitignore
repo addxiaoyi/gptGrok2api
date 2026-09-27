@@ -1,0 +1,22 @@
+# 子项目各自的构建产物与依赖
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[oc]
+*.egg-info
+.venv/
+venv/
+
+# 二进制与归档
+*.exe
+*.tar.gz
+*.zip
+
+# 子项目本地配置（可能含密钥）
+.env
+.env.local
+config.json
+data/
+logs/
+*.log
