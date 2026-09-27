@@ -296,6 +296,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/accounts/oauth/finish", s.accountOAuthFinish)
 	mux.HandleFunc("/api/accounts/export", s.accountExport)
 	mux.HandleFunc("/api/accounts/import-api", s.importAccountsAPI)
+	mux.HandleFunc("/admin/api/tokens/add", s.legacyTokensAdd)
 	mux.HandleFunc("/api/accounts/agent-identities", s.agentIdentities)
 	mux.HandleFunc("/api/accounts/import-cleanup", s.cleanupImportedAbnormalAccounts)
 	mux.HandleFunc("/api/accounts/update", s.updateAccount)
@@ -1138,6 +1139,32 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeError(w, http.StatusNotFound, "admin endpoint not found", "not_found")
+}
+
+func (s *Server) legacyTokensAdd(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAccountImport(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed", "invalid_request_error")
+		return
+	}
+	var request struct {
+		Tokens []string `json:"tokens"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if len(request.Tokens) == 0 {
+		writeError(w, http.StatusBadRequest, "tokens are required", "invalid_request_error")
+		return
+	}
+	added, skipped, _, err := s.store.AddAccounts(request.Tokens, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error(), "server_error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"added": added, "skipped": skipped})
 }
 
 func (s *Server) proxyUpstream(w http.ResponseWriter, r *http.Request) {

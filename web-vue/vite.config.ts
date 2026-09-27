@@ -43,6 +43,7 @@ export default defineConfig({
         target: process.env.VITE_GROK_REGISTER_URL || 'http://127.0.0.1:8092',
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/grok-register/, '') || '/',
       },
       '/images': {
         target: proxyTarget,

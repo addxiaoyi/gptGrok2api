@@ -1,13 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { getAuthToken } from '@/api/client'
+import { onMounted, ref } from 'vue'
 
-const GROK_REGISTER_BASE_URL = import.meta.env.VITE_GROK_REGISTER_URL || 'http://127.0.0.1:8092'
-
-const iframeSrc = computed(() => {
-  const token = getAuthToken()
-  return `${GROK_REGISTER_BASE_URL}?admin_token=${encodeURIComponent(token)}`
-})
+const iframeSrc = import.meta.env.VITE_GROK_REGISTER_URL || '/grok-register'
 
 const isLoading = ref(true)
 const isConnected = ref(false)
@@ -50,8 +44,10 @@ onMounted(() => {
       <h3>{{ error }}</h3>
       <p>
         请先启动 grok-register 服务：<br />
-        <code>docker compose -f integrations/docker-compose.yml up -d</code>
+        <code>python -m web.server</code>
+        （或 <code>docker compose -f integrations/docker-compose.yml up -d</code>）
       </p>
+      <p class="hint">将通过主项目代理访问 Grok 注册机服务。</p>
       <button class="retry-btn" @click="reload">重试连接</button>
     </div>
 
@@ -163,6 +159,13 @@ onMounted(() => {
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
+}
+
+.hint {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 12px;
+  text-align: center;
 }
 
 .retry-btn:hover {
