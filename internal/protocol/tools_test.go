@@ -61,8 +61,8 @@ func TestBuildToolSystemPromptFormatsCorrectly(t *testing.T) {
 	if !strings.Contains(prompt, "search the web") {
 		t.Fatalf("expected description in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Do NOT call any tools") {
-		t.Fatalf("expected default choice text: %s", prompt)
+	if !strings.Contains(prompt, "WHEN TO CALL:") {
+		t.Fatalf("expected WHEN TO CALL section: %s", prompt)
 	}
 }
 
@@ -88,10 +88,25 @@ func TestBuildToolSystemPromptChoiceSpecificTool(t *testing.T) {
 }
 
 func TestParseToolCallsXMLStyle(t *testing.T) {
-	input := `<tool_calls><tool_name>my_tool</tool_name><parameters>{"key":"val"}</parameters></tool_calls>`
+	input := `<tool_calls><tool_call><tool_name>my_tool</tool_name><parameters>{"key":"val"}</parameters></tool_call></tool_calls>`
 	calls := ParseToolCalls(input, nil)
 	if len(calls) != 1 || calls[0].Name != "my_tool" || calls[0].Arguments != `{"key":"val"}` {
 		t.Fatalf("unexpected XML tool calls: %#v", calls)
+	}
+	if !strings.HasPrefix(calls[0].ID, "call_") {
+		t.Fatalf("expected generated call ID, got %q", calls[0].ID)
+	}
+}
+
+func TestParseToolCallsXMLStyleMultipleBlocks(t *testing.T) {
+	input := "<tool_calls>\n<tool_call><tool_name>first</tool_name><parameters>{\"a\":1}</parameters></tool_call>\n" +
+		"<tool_call><tool_name>second</tool_name><parameters>{\"b\":2}</parameters></tool_call>\n</tool_calls>"
+	calls := ParseToolCalls(input, nil)
+	if len(calls) != 2 || calls[0].Name != "first" || calls[1].Name != "second" {
+		t.Fatalf("expected both tool calls parsed: %#v", calls)
+	}
+	if calls[0].ID == calls[1].ID {
+		t.Fatalf("expected unique IDs, both were %q", calls[0].ID)
 	}
 }
 
@@ -111,7 +126,8 @@ func TestParseToolCallsRequiresToolCallsKeyword(t *testing.T) {
 }
 
 func TestParseToolCallsFiltersByAllowList(t *testing.T) {
-	input := `<tool_calls><tool_name>allowed</tool_name><parameters>{}</parameters><tool_name>blocked</tool_name><parameters>{}</parameters></tool_calls>`
+	input := "<tool_calls>\n<tool_call><tool_name>allowed</tool_name><parameters>{}</parameters></tool_call>\n" +
+		"<tool_call><tool_name>blocked</tool_name><parameters>{}</parameters></tool_call>\n</tool_calls>"
 	calls := ParseToolCalls(input, []string{"allowed"})
 	if len(calls) != 1 || calls[0].Name != "allowed" {
 		t.Fatalf("expected allow-list filter to work: %#v", calls)
@@ -119,7 +135,7 @@ func TestParseToolCallsFiltersByAllowList(t *testing.T) {
 }
 
 func TestParseToolCallsHandlesMissingParameters(t *testing.T) {
-	input := `<tool_calls><tool_name>no_params</tool_name></tool_calls>`
+	input := "<tool_calls><tool_call><tool_name>no_params</tool_name></tool_call></tool_calls>"
 	calls := ParseToolCalls(input, nil)
 	if len(calls) != 1 {
 		t.Fatalf("expected tool without params: %#v", calls)
@@ -130,18 +146,21 @@ func TestParseToolCallsHandlesMissingParameters(t *testing.T) {
 }
 
 func TestParseToolCallsHandlesInvalidJSONParams(t *testing.T) {
-	input := `<tool_calls><tool_name>invalid</tool_name><parameters>not json</parameters></tool_calls>`
+	input := "<tool_calls><tool_call><tool_name>invalid</tool_name><parameters>not json</parameters></tool_call></tool_calls>"
 	calls := ParseToolCalls(input, nil)
 	if len(calls) != 1 {
 		t.Fatalf("expected tool despite invalid params JSON: %#v", calls)
 	}
+	if calls[0].Arguments != "{}" {
+		t.Fatalf("expected default empty args for invalid JSON, got %s", calls[0].Arguments)
+	}
 }
 
 func TestParseToolCallsIgnoresNonMatchingName(t *testing.T) {
-	input := `<tool_calls><tool_name>some_tool</tool_name><parameters>{}</parameters></tool_calls>`
+	input := "<tool_calls><tool_call><tool_name>some_tool</tool_name><parameters>{}</parameters></tool_call></tool_calls>"
 	calls := ParseToolCalls(input, []string{"other_tool"})
-	if calls != nil {
-		t.Fatalf("expected nil for non-allowed tool, got: %#v", calls)
+	if len(calls) != 0 {
+		t.Fatalf("expected no calls for non-allowed tool, got: %#v", calls)
 	}
 }
 
@@ -152,30 +171,42 @@ func TestParseToolCallsHandlesEmptyInput(t *testing.T) {
 }
 
 func TestParseToolCallsJSONNested(t *testing.T) {
-	input := `{"tool_calls":[{"name":"a"},{"tool_calls":[{"name":"b"}]}]`
+	input := `{"tool_calls":[{"name":"a","arguments":{"x":1}},{"name":"b","tool_name":"fallback","input":{"y":2}}]}`
 	calls := ParseToolCalls(input, nil)
-	if len(calls) != 1 || calls[0].Name != "a" {
-		t.Fatalf("expected only top-level tool_calls: %#v", calls)
+	if len(calls) != 2 || calls[0].Name != "a" || calls[1].Name != "b" {
+		t.Fatalf("expected both top-level tool_calls: %#v", calls)
+	}
+	if calls[1].Arguments != `{"y":2}` {
+		t.Fatalf("expected input field used as arguments, got %s", calls[1].Arguments)
 	}
 }
 
-func TestParseToolCallsMalformedJSONFallsBackToDirect(t *testing.T) {
-	input := `{"tool_calls":[{"name":"recovered"}]}`
-	calls := ParseToolCalls(input, nil)
-	if len(calls) != 1 {
-		t.Fatalf("expected direct extraction: %#v", calls)
+func TestParseToolCallsJSONFiltersAndSkips(t *testing.T) {
+	input := `{"tool_calls":[{"name":"keep","arguments":{}},{"name":"skip"},{"arguments":{}}]}`
+	calls := ParseToolCalls(input, []string{"keep"})
+	if len(calls) != 1 || calls[0].Name != "keep" {
+		t.Fatalf("expected allow-list and empty-name filtering: %#v", calls)
+	}
+}
+
+func TestParseToolCallsJSONWithoutBrace(t *testing.T) {
+	if calls := ParseToolCalls("tool_calls mentioned but no JSON", nil); calls != nil {
+		t.Fatalf("expected nil without JSON object, got %#v", calls)
+	}
+}
+
+func TestParseToolCallsJSONMalformedBody(t *testing.T) {
+	if calls := ParseToolCalls(`{"tool_calls": [`, nil); calls != nil {
+		t.Fatalf("expected nil for malformed JSON, got %#v", calls)
 	}
 }
 
 func TestToolStringValueExtractsCorrectly(t *testing.T) {
-	if toolStringValue("  hello  ") != "hello" {
-		t.Fatal("expected trimmed string")
+	if got := toolStringValue("  hello  "); got != "hello" {
+		t.Fatalf("expected trimmed string, got %q", got)
 	}
-	if toolStringValue(nil) != "" {
-		t.Fatal("expected empty for nil")
-	}
-	if toolStringValue(map[string]any{}) != "" {
-		t.Fatal("expected empty for non-string")
+	if got := toolStringValue(nil); got != "" {
+		t.Fatalf("expected empty for nil, got %q", got)
 	}
 }
 

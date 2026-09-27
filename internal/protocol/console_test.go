@@ -282,7 +282,6 @@ func TestResponsesInputMessagesVariants(t *testing.T) {
 			map[string]any{"role": "assistant", "content": "hi"},
 			map[string]any{"content": "defaulted"},
 			"loose text",
-			42,
 		},
 		"be nice",
 	)
@@ -292,8 +291,24 @@ func TestResponsesInputMessagesVariants(t *testing.T) {
 	if messages[0].Role != "system" || messages[0].Content != "be nice" {
 		t.Fatalf("instructions should lead as system: %#v", messages[0])
 	}
-	if messages[2].Role != "user" {
+	if messages[1].Role != "assistant" || messages[1].Content != "hi" {
+		t.Fatalf("expected assistant message intact: %#v", messages[1])
+	}
+	if messages[2].Role != "user" || messages[2].Content != "defaulted" {
 		t.Fatalf("expected missing role to default to user: %#v", messages[2])
+	}
+	if messages[3].Role != "user" || messages[3].Content != "loose text" {
+		t.Fatalf("expected loose string as user message: %#v", messages[3])
+	}
+}
+
+func TestResponsesInputMessagesSkipsUnconvertibleValues(t *testing.T) {
+	messages := ResponsesInputMessages([]any{42, nil}, "")
+	if len(messages) != 1 {
+		t.Fatalf("expected only nil to be skipped, got %#v", messages)
+	}
+	if messages[0].Role != "user" || messages[0].Content != "42" {
+		t.Fatalf("expected 42 to coerce to string, got %#v", messages[0])
 	}
 }
 
