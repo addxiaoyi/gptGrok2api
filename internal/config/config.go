@@ -10,6 +10,38 @@ import (
 	"time"
 )
 
+// 环境变量可调数值的上下界。裸字面量散在 Load 里时，
+// 读者无法得知「为什么是 300」，调参时也极易漏改某一处。
+const (
+	minRequestTimeoutSeconds = 10
+	maxRequestTimeoutSeconds = 300
+
+	minChatMaxRetries = 0
+	maxChatMaxRetries = 3
+
+	minImageAccountConcurrency = 1
+	maxImageAccountConcurrency = 4
+
+	minImageMaxConcurrency = 1
+	maxImageMaxConcurrency = 1024
+
+	minImageRetentionDays = 1
+	maxImageRetentionDays = 3650
+
+	minImageCleanupIntervalSeconds = 60
+	maxImageCleanupIntervalSeconds = 86400
+)
+
+func clampInt(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
 type Config struct {
 	RootDir                string
 	ListenAddr             string
@@ -109,45 +141,12 @@ func Load(root string) (Config, error) {
 		return Config{}, fmt.Errorf("resolve root: %w", err)
 	}
 
-	requestTimeoutSeconds := envInt("GO_REQUEST_TIMEOUT_SECONDS", 180)
-	if requestTimeoutSeconds < 10 {
-		requestTimeoutSeconds = 10
-	}
-	if requestTimeoutSeconds > 300 {
-		requestTimeoutSeconds = 300
-	}
-	chatMaxRetries := envInt("GO_CHAT_MAX_RETRIES", 2)
-	if chatMaxRetries < 0 {
-		chatMaxRetries = 0
-	}
-	if chatMaxRetries > 3 {
-		chatMaxRetries = 3
-	}
-	imageAccountConcurrency := envInt("GO_IMAGE_ACCOUNT_CONCURRENCY", 1)
-	if imageAccountConcurrency < 1 {
-		imageAccountConcurrency = 1
-	}
-	if imageAccountConcurrency > 4 {
-		imageAccountConcurrency = 4
-	}
-	imageMaxConcurrency := envInt("GO_IMAGE_MAX_CONCURRENCY", 128)
-	if imageMaxConcurrency < 1 {
-		imageMaxConcurrency = 1
-	}
-	if imageMaxConcurrency > 1024 {
-		imageMaxConcurrency = 1024
-	}
-	imageRetentionDays := envInt("GO_IMAGE_RETENTION_DAYS", 1)
-	if imageRetentionDays < 1 {
-		imageRetentionDays = 1
-	}
-	if imageRetentionDays > 3650 {
-		imageRetentionDays = 3650
-	}
-	imageCleanupIntervalSeconds := envInt("GO_IMAGE_CLEANUP_INTERVAL_SECONDS", 3600)
-	if imageCleanupIntervalSeconds < 60 {
-		imageCleanupIntervalSeconds = 60
-	}
+	requestTimeoutSeconds := clampInt(envInt("GO_REQUEST_TIMEOUT_SECONDS", 180), minRequestTimeoutSeconds, maxRequestTimeoutSeconds)
+	chatMaxRetries := clampInt(envInt("GO_CHAT_MAX_RETRIES", 2), minChatMaxRetries, maxChatMaxRetries)
+	imageAccountConcurrency := clampInt(envInt("GO_IMAGE_ACCOUNT_CONCURRENCY", 1), minImageAccountConcurrency, maxImageAccountConcurrency)
+	imageMaxConcurrency := clampInt(envInt("GO_IMAGE_MAX_CONCURRENCY", 128), minImageMaxConcurrency, maxImageMaxConcurrency)
+	imageRetentionDays := clampInt(envInt("GO_IMAGE_RETENTION_DAYS", 1), minImageRetentionDays, maxImageRetentionDays)
+	imageCleanupIntervalSeconds := clampInt(envInt("GO_IMAGE_CLEANUP_INTERVAL_SECONDS", 3600), minImageCleanupIntervalSeconds, maxImageCleanupIntervalSeconds)
 
 	cfg := Config{
 		RootDir:                root,

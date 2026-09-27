@@ -174,6 +174,12 @@ const (
 	imageNodeCanaryEvery   = 20
 	defaultImageNodeLimit  = 3
 	imageNodeSlowCooldown  = time.Minute
+	// imageNodeMaxCooldownExponent 封顶指数退避：失败次数再高，冷却也不超过 2^4 分钟（16 分钟）。
+	imageNodeMaxCooldownExponent = 4
+	// latencyEMAWeight/新值权重构成 7:3 的指数滑动平均。
+	latencyEMAOldWeight = 7
+	latencyEMAWeight     = 3
+	latencyEMATotal      = 10
 )
 
 type imageLeaseContextKey struct{}
@@ -216,26 +222,27 @@ func (m *Manager) SetImageNodeResultCallback(callback func(ImageNodeRuntimeResul
 	m.mu.Unlock()
 }
 
-func NewManager(single string, pool []string) *Manager {
-	clean := make([]string, 0, len(pool))
-	for _, item := range pool {
+// normalizePool 清洗代理池：去空白、归一化、丢弃无效项。
+// 清洗规则变更只需改这一处。
+func normalizePool(items []string) []string {
+	clean := make([]string, 0, len(items))
+	for _, item := range items {
 		if value := normalizeURL(item); value != "" {
 			clean = append(clean, value)
 		}
 	}
-	return &Manager{url: normalizeURL(single), pool: clean, imageGroups: map[string]*imageGroup{}, imageWake: make(chan struct{})}
+	return clean
+}
+
+func NewManager(single string, pool []string) *Manager {
+	return &Manager{url: normalizeURL(single), pool: normalizePool(pool), imageGroups: map[string]*imageGroup{}, imageWake: make(chan struct{})}
 }
 
 func (m *Manager) SetDefault(single string, pool []string) {
 	if m == nil {
 		return
 	}
-	clean := make([]string, 0, len(pool))
-	for _, item := range pool {
-		if value := normalizeURL(item); value != "" {
-			clean = append(clean, value)
-		}
-	}
+	clean := normalizePool(pool)
 	m.mu.Lock()
 	m.url = normalizeURL(single)
 	m.pool = clean
@@ -631,7 +638,7 @@ func (l *Lease) Release(runtimeFailure bool) {
 		observedLatencyMS := l.latencyMS.Load()
 		if runtimeFailure && !l.node.evicted {
 			l.node.failures++
-			cooldown := time.Duration(1<<min(l.node.failures-1, 4)) * time.Minute
+			cooldown := time.Duration(1<<min(l.node.failures-1, imageNodeMaxCooldownExponent)) * time.Minute
 			l.node.cooldownUntil = time.Now().Add(cooldown)
 			removed := l.node.failures >= imageNodeFailureLimit
 			if removed {
@@ -660,15 +667,16 @@ func (l *Lease) Release(runtimeFailure bool) {
 				if l.node.latencyMS <= 0 {
 					l.node.latencyMS = observedLatencyMS
 				} else {
-					l.node.latencyMS = (l.node.latencyMS*7 + observedLatencyMS*3) / 10
+					l.node.latencyMS = (l.node.latencyMS*latencyEMAOldWeight + observedLatencyMS*latencyEMAWeight) / latencyEMATotal
 				}
 			}
-			if l.slow.Load() {
+			wasSlow := l.slow.Load()
+			if wasSlow {
 				l.node.cooldownUntil = time.Now().Add(imageNodeSlowCooldown)
 			} else {
 				l.node.cooldownUntil = time.Time{}
 			}
-			if hadFailures || l.slow.Load() || l.node.successes == imageNodeStableSuccess || l.node.successes%25 == 0 {
+			if hadFailures || wasSlow || l.node.successes == imageNodeStableSuccess || l.node.successes%25 == 0 {
 				event = &ImageNodeRuntimeResult{GroupID: l.GroupID, GroupName: l.GroupName, NodeID: l.NodeID, NodeName: l.NodeName, URL: l.URL, Successes: l.node.successes, LatencyMS: l.node.latencyMS}
 			}
 		}
