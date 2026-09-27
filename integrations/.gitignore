@@ -17,6 +17,20 @@ venv/
 .env
 .env.local
 config.json
-data/
+
+# 运行时产物目录
 logs/
 *.log
+screenshots/
+
+# Docker 构建缓存
+.docker-build-cache/
+
+# grok-register 运行时数据（容器内持久化）
+data/grok-register/output/
+data/grok-register/logs/
+data/grok-register/cpa_auths/
+data/grok-register/screenshots/
+data/grok-register/accounts_*.txt
+data/grok-register/accounts_*.txt.pending.jsonl
+data/grok-register/token.json
