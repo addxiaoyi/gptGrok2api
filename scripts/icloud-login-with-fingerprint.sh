@@ -1,6 +1,9 @@
 #!/bin/bash
-# iCloud 协议登录完整脚本（含 device_fingerprint）
-# 用法：./icloud-login-with-fingerprint.sh YOUR_APPLE_ID YOUR_PASSWORD
+# iCloud 协议登录完整脚本（安全输入版）
+# 用法：
+#   ./icloud-login-with-fingerprint.sh <apple_id>
+#   密码从 ICLOUD_PASSWORD 环境变量读取，或交互式输入
+#   2FA验证码自动隐藏输入
 
 set -euo pipefail
 
@@ -8,11 +11,25 @@ BASE="${ICLOUD_API_BASE:-http://127.0.0.1:8080}"
 AUTH_HEADER="Authorization: Bearer ${ADMIN_KEY:-admin-secret-key}"
 
 APPLE_ID="${1:-}"
-PASSWORD="${2:-}"
 
-if [[ -z "$APPLE_ID" || -z "$PASSWORD" ]]; then
-    echo "用法：$0 <apple_id> <password>"
-    echo "示例：$0 example@icloud.com your_password"
+if [[ -z "$APPLE_ID" ]]; then
+    echo "用法：$0 <apple_id>"
+    echo "密码通过 ICLOUD_PASSWORD 环境变量提供，或脚本会提示交互式输入"
+    exit 1
+fi
+
+# 安全获取密码：环境变量 > 交互式隐藏输入
+if [[ -n "${ICLOUD_PASSWORD:-}" ]]; then
+    PASSWORD="$ICLOUD_PASSWORD"
+    echo "使用环境变量中的 Apple ID 密码"
+else
+    echo "请输入 Apple ID 密码（输入后将不显示）："
+    read -rs PASSWORD
+    echo ""
+fi
+
+if [[ -z "$PASSWORD" ]]; then
+    echo "错误：密码不能为空"
     exit 1
 fi
 
@@ -20,6 +37,7 @@ fi
 DEVICE_FINGERPRINT=$(head -c 8 /dev/urandom | xxd -p)
 DEVICE_NAME="gptgrok2api-${DEVICE_FINGERPRINT}"
 
+echo ""
 echo "=== iCloud 协议登录（带设备指纹）==="
 echo "Apple ID: $APPLE_ID"
 echo "设备名称: $DEVICE_NAME"
@@ -45,6 +63,9 @@ echo "登录响应:"
 echo "$LOGIN_RESPONSE" | jq '.' 2>/dev/null || echo "$LOGIN_RESPONSE"
 echo ""
 
+# 清理内存中的密码
+PASSWORD=""
+
 # 检查是否需要 2FA
 NEEDS_2FA=$(echo "$LOGIN_RESPONSE" | jq -r '.needs_2fa // false')
 
@@ -59,8 +80,8 @@ if [[ "$NEEDS_2FA" == "true" ]]; then
     echo "   过期时间：$EXPIRES_AT"
     echo ""
     
-    # 提示用户输入验证码
-    read -p "请输入 6 位验证码： " CODE
+    read -rsp "请输入 6 位验证码（输入后将不显示）： " CODE
+    echo ""
     
     if [[ ${#CODE} -ne 6 || ! "$CODE" =~ ^[0-9]{6}$ ]]; then
         echo "错误：验证码必须是 6 位数字"
@@ -89,6 +110,9 @@ if [[ "$NEEDS_2FA" == "true" ]]; then
             \"method\": \"$SUBMIT_METHOD\"
         }" \
         "$BASE/api/icloud/icloud/protocol-login/2fa")
+    
+    # 清理内存中的验证码
+    CODE=""
     
     echo "2FA 响应:"
     echo "$2FA_RESPONSE" | jq '.' 2>/dev/null || echo "$2FA_RESPONSE"
