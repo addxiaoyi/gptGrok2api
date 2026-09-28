@@ -33,15 +33,9 @@ if [[ -z "$PASSWORD" ]]; then
     exit 1
 fi
 
-# 生成随机设备指纹（16 字符十六进制）
-DEVICE_FINGERPRINT=$(head -c 8 /dev/urandom | xxd -p)
-DEVICE_NAME="gptgrok2api-${DEVICE_FINGERPRINT}"
-
 echo ""
-echo "=== iCloud 协议登录（带设备指纹）==="
+echo "=== iCloud 协议登录 ==="
 echo "Apple ID: $APPLE_ID"
-echo "设备名称: $DEVICE_NAME"
-echo "设备指纹: $DEVICE_FINGERPRINT"
 echo "======================================"
 echo ""
 
@@ -53,9 +47,7 @@ LOGIN_RESPONSE=$(curl -s -X POST \
     -d "{
         \"apple_id\": \"$APPLE_ID\",
         \"password\": \"$PASSWORD\",
-        \"two_factor_method\": \"app\",
-        \"device_name\": \"$DEVICE_NAME\",
-        \"device_fingerprint\": \"$DEVICE_FINGERPRINT\"
+        \"two_factor_method\": \"app\"
     }" \
     "$BASE/api/icloud/icloud/protocol-login/start")
 

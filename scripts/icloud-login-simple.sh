@@ -31,13 +31,10 @@ if [[ -z "$PASSWORD" ]]; then
     exit 1
 fi
 
-# 生成设备指纹
-FINGERPRINT=$(head -c 8 /dev/urandom | xxd -p)
-
-echo "🔐 发起登录 (指纹: $FINGERPRINT)..."
+echo "🔐 发起登录..."
 RESP=$(curl -s -X POST \
     -H "$AUTH" -H "Content-Type: application/json" \
-    -d "{\"apple_id\":\"$APPLE_ID\",\"password\":\"$PASSWORD\",\"two_factor_method\":\"app\",\"device_fingerprint\":\"$FINGERPRINT\"}" \
+    -d "{\"apple_id\":\"$APPLE_ID\",\"password\":\"$PASSWORD\",\"two_factor_method\":\"app\"}" \
     "$BASE/api/icloud/icloud/protocol-login/start")
 
 # 清理内存中的密码
