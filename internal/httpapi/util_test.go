@@ -198,28 +198,29 @@ func TestBuildAccountExportItem(t *testing.T) {
 }
 
 func TestSub2APIAccount(t *testing.T) {
-	export := map[string]string{
+	export := map[string]any{
 		"access_token": "at123",
 		"refresh_token": "rt456",
 		"id_token": "id789",
 		"email": "test@example.com",
 		"account_id": "acct_123",
 		"expired": "2025-01-01T00:00:00Z",
+		"status": "正常",
 	}
 	result := sub2APIAccount(export)
 	if result["name"] == nil || result["platform"] != "openai" {
 		t.Fatalf("sub2APIAccount bad: %v", result)
 	}
-	creds := result["credentials"].(map[string]string)
+	creds := result["credentials"].(map[string]any)
 	if creds["access_token"] != "at123" {
 		t.Fatalf("sub2APIAccount creds bad")
 	}
 }
 
 func TestAccountExportZip(t *testing.T) {
-	items := []map[string]string{
-		{"type":"codex","email":"a@test.com","account_id":"a1","access_token":"at","refresh_token":"rt","id_token":"id"},
-		{"type":"codex","email":"b@test.com","account_id":"b2","access_token":"at2","refresh_token":"rt2","id_token":"id2"},
+	items := []map[string]any{
+		{"type": "codex", "email": "a@test.com", "account_id": "a1", "access_token": "at", "refresh_token": "rt", "id_token": "id", "status": "正常"},
+		{"type": "codex", "email": "b@test.com", "account_id": "b2", "access_token": "at2", "refresh_token": "rt2", "id_token": "id2", "status": "正常"},
 	}
 	data, err := accountExportZip(items)
 	if err != nil {
@@ -227,6 +228,39 @@ func TestAccountExportZip(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatalf("accountExportZip empty")
+	}
+}
+
+func TestSub2APIProxiesAndPlanType(t *testing.T) {
+	accounts := []map[string]any{
+		{"access_token": "at", "email": "a@test.com", "proxy": "http://proxy1:8080", "plan_type": "chatgpt_plus"},
+		{"access_token": "bt", "email": "b@test.com", "proxy": "http://proxy1:8080", "plan_type": "free"},
+		{"access_token": "ct", "email": "c@test.com"},
+	}
+	proxies := collectSub2APIProxies(accounts)
+	if len(proxies) != 1 {
+		t.Fatalf("expected 1 unique proxy, got %d: %v", len(proxies), proxies)
+	}
+	if proxies[0] != "http://proxy1:8080" {
+		t.Fatalf("unexpected proxy: %v", proxies[0])
+	}
+	acc := sub2APIAccount(accounts[0])
+	extra := acc["extra"].(map[string]any)
+	if extra["proxy"] != "http://proxy1:8080" {
+		t.Fatalf("expected proxy in extra, got %v", extra["proxy"])
+	}
+	if extra["plan_type"] != "chatgpt_plus" {
+		t.Fatalf("expected plan_type in extra, got %v", extra["plan_type"])
+	}
+}
+
+func TestNestedStringValue(t *testing.T) {
+	item := map[string]any{"fields": map[string]any{"proxy": "http://nested:8080"}}
+	if v := nestedStringValue(item, "fields", "proxy"); v != "http://nested:8080" {
+		t.Fatalf("nestedStringValue got %q", v)
+	}
+	if v := nestedStringValue(item, "missing", "key"); v != "" {
+		t.Fatalf("nestedStringValue should return empty for missing key, got %q", v)
 	}
 }
 

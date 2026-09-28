@@ -126,12 +126,16 @@ func (s *Server) accountExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if format == "sub2api" {
-		payload := map[string]any{"exported_at": time.Now().UTC().Format(time.RFC3339), "proxies": []any{}, "accounts": make([]map[string]any, 0, len(accounts))}
-		items := payload["accounts"].([]map[string]any)
+		accountsList := make([]map[string]any, 0, len(accounts))
 		for _, account := range accounts {
-			items = append(items, sub2APIAccount(account))
+			accountsList = append(accountsList, sub2APIAccount(account))
 		}
-		payload["accounts"] = items
+		proxies := collectSub2APIProxies(accounts)
+		payload := map[string]any{
+			"exported_at": time.Now().UTC().Format(time.RFC3339),
+			"proxies":     proxies,
+			"accounts":    accountsList,
+		}
 		writeDownloadJSON(w, fmt.Sprintf("openai-accounts-sub2api-%s.json", stamp), payload)
 		return
 	}
@@ -142,7 +146,7 @@ func (s *Server) accountExport(w http.ResponseWriter, r *http.Request) {
 	writeDownloadJSON(w, fmt.Sprintf("codex-accounts-%s.json", stamp), payload)
 }
 
-func (s *Server) exportAccounts(tokens []string) ([]map[string]string, error) {
+func (s *Server) exportAccounts(tokens []string) ([]map[string]any, error) {
 	items, err := s.store.AccountList()
 	if err != nil {
 		return nil, err
@@ -152,14 +156,14 @@ func (s *Server) exportAccounts(tokens []string) ([]map[string]string, error) {
 	for _, token := range resolved {
 		targets[token] = struct{}{}
 	}
-	result := make([]map[string]string, 0, len(items))
+	result := make([]map[string]any, 0, len(items))
 	for _, account := range items {
 		if len(tokens) > 0 {
 			if _, ok := targets[accountToken(account)]; !ok {
 				continue
 			}
 		}
-		item, ok := buildAccountExportItem(account)
+		item, ok := buildAccountExportItemFull(account)
 		if ok {
 			result = append(result, item)
 		}
@@ -188,23 +192,96 @@ func buildAccountExportItem(account map[string]any) (map[string]string, bool) {
 	return item, true
 }
 
-func sub2APIAccount(account map[string]string) map[string]any {
-	credentials := map[string]string{"access_token": account["access_token"]}
-	for source, target := range map[string]string{"refresh_token": "refresh_token", "id_token": "id_token", "email": "email", "account_id": "chatgpt_account_id", "expired": "expires_at"} {
-		if account[source] != "" {
-			credentials[target] = account[source]
-		}
+func buildAccountExportItemFull(account map[string]any) (map[string]any, bool) {
+	access, refresh, id := stringValue(account["access_token"]), stringValue(account["refresh_token"]), stringValue(account["id_token"])
+	if access == "" || refresh == "" || id == "" {
+		return nil, false
 	}
-	return map[string]any{"name": firstNonEmpty(account["email"], account["account_id"], "OpenAI OAuth Account"), "platform": "openai", "type": "oauth", "credentials": credentials, "extra": map[string]any{"import_source": "chatgpt2api_openai_export", "synced_at": time.Now().UTC().Format(time.RFC3339)}, "concurrency": 1, "priority": 0, "rate_multiplier": 1, "auto_pause_on_expired": true}
+	return cloneMap(account), true
 }
 
-func accountExportZip(items []map[string]string) ([]byte, error) {
+func sub2APIAccount(account map[string]any) map[string]any {
+	credentials := map[string]any{"access_token": account["access_token"]}
+	for source, target := range map[string]string{"refresh_token": "refresh_token", "id_token": "id_token", "email": "email", "account_id": "chatgpt_account_id", "expired": "expires_at"} {
+		if val := stringValue(account[source]); val != "" {
+			credentials[target] = val
+		}
+	}
+	name := firstNonEmpty(stringValue(account["email"]), stringValue(account["account_id"]), stringValue(account["user_id"]), "OpenAI OAuth Account")
+	status := stringValue(account["status"])
+	if status == "" {
+		status = "正常"
+	}
+	extra := map[string]any{
+		"import_source": "chatgpt2api_openai_export",
+		"synced_at":     time.Now().UTC().Format(time.RFC3339),
+		"source_type":   stringValue(account["source_type"]),
+		"created_at":    stringValue(account["created_at"]),
+		"plan_type":     stringValue(account["plan_type"]),
+	}
+	if stringValue(account["enabled"]) == "true" || account["enabled"] == true {
+		extra["enabled"] = true
+	}
+	proxy := firstNonEmpty(stringValue(account["proxy"]), nestedStringValue(account, "fields", "proxy"))
+	if proxy != "" {
+		extra["proxy"] = proxy
+	}
+	if groupID := stringValue(account["group_id"]); groupID != "" {
+		extra["group_id"] = groupID
+	}
+	return map[string]any{
+		"name":                name,
+		"platform":            "openai",
+		"type":                "oauth",
+		"status":              status,
+		"credentials":         credentials,
+		"extra":               extra,
+		"concurrency":         1,
+		"priority":            0,
+		"rate_multiplier":     1,
+		"auto_pause_on_expired": true,
+	}
+}
+
+func nestedStringValue(item map[string]any, keys ...string) string {
+	for i, key := range keys {
+		value, ok := item[key]
+		if !ok {
+			return ""
+		}
+		if i == len(keys)-1 {
+			return stringValue(value)
+		}
+		child, ok := value.(map[string]any)
+		if !ok {
+			return ""
+		}
+		item = child
+	}
+	return ""
+}
+
+func collectSub2APIProxies(accounts []map[string]any) []any {
+	seen := map[string]bool{}
+	proxies := []any{}
+	for _, account := range accounts {
+		if proxy := stringValue(account["proxy"]); proxy != "" {
+			if !seen[proxy] {
+				seen[proxy] = true
+				proxies = append(proxies, proxy)
+			}
+		}
+	}
+	return proxies
+}
+
+func accountExportZip(items []map[string]any) ([]byte, error) {
 	var output []byte
 	writer := newByteWriter(&output)
 	archive := zip.NewWriter(writer)
 	used := map[string]bool{}
 	for index, item := range items {
-		base := safeExportName(firstNonEmpty(item["email"], item["account_id"], fmt.Sprintf("account-%03d", index+1)), fmt.Sprintf("account-%03d", index+1))
+		base := safeExportName(firstNonEmpty(stringValue(item["email"]), stringValue(item["account_id"]), fmt.Sprintf("account-%03d", index+1)), fmt.Sprintf("account-%03d", index+1))
 		name := base
 		for n := 2; used[name]; n++ {
 			name = fmt.Sprintf("%s-%d", base, n)
