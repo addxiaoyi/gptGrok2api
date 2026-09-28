@@ -14,6 +14,7 @@ GPTGrok2API Go 是一个自托管的 OpenAI 兼容网关。它使用 Go 运行�
 - 多账号池：JWT、OAuth refresh token、Grok SSO/OAuth、账号分组、失败换号、限流冷却和并发调度。
 - 代理出口：默认代理、代理池、代理组、订阅导入、节点健康检测和图片任务专用并发限制。
 - 管理控制台：账号、代理、图片图库、日志、实时请求、提示词、注册任务、备份和系统设置。
+- iCloud 隐私邮箱：通过 iCloud Privacy Mail sidecar 完成 Apple 登录、HME 邮箱创建、验证码收取和自动同步。
 - 本地持久化：账号和配置使用 JSON 文件，队列可使用 JSON 或 Redis，图片和视频保存在 <code>data/files/</code>。
 
 ## 架构
@@ -99,6 +100,76 @@ Authorization: Bearer <api-key>
 ~~~
 
 也兼容 <code>X-API-Key</code>。<code>CHATGPT2API_AUTH_KEY</code> 用于普通 API 调用，<code>CHATGPT2API_ADMIN_KEY</code> 用于管理接口；控制台中创建的用户密钥会保存为哈希，不会以明文写入 <code>data/auth_keys.json</code>。除非明确需要，不要开启 <code>GO_ALLOW_ANONYMOUS</code>。
+
+## iCloud 隐私邮箱
+
+本项目集成了 iCloud Privacy Mail sidecar，支持 Apple 账号登录、HME（Hidden My Email）邮箱创建、自动同步和验证码收取。
+
+### 前置要求
+
+- 安装并启动 iCloud Privacy Mail sidecar（默认端口 <code>8788</code>）
+- 拥有有效的 Apple ID 和密码
+- 如需接收验证码，需生成 Apple App 专用密码
+
+### 快速开始
+
+1. 启动 sidecar：
+
+~~~bash
+cd deploy/icloud-privacy-mail
+./icloud-privacy-mail -host 127.0.0.1 -port 8788 -data /tmp/icloud-data/state.json
+~~~
+
+2. 使用脚本登录（交互式）：
+
+~~~bash
+./scripts/icloud-login-simple.sh your@icloud.com
+# 或带环境变量
+ICLOUD_PASSWORD="your-password" ./scripts/icloud-login-simple.sh your@icloud.com
+~~~
+
+3. 验证登录态：
+
+~~~bash
+curl -s -H "Authorization: Bearer admin-secret-key" http://127.0.0.1:8080/api/icloud/status | jq '.icloud_session'
+~~~
+
+4. 保存 IMAP App 专用密码（用于读取验证码）：
+
+~~~bash
+curl -s -X POST -H "Authorization: Bearer admin-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"account_id":"your@icloud.com","email":"your@icloud.com","app_password":"ABCD-EFGH-IJKL"}' \
+  http://127.0.0.1:8080/api/icloud/icloud/imap-login/save
+~~~
+
+5. 创建 HME 邮箱：
+
+~~~bash
+curl -s -X POST -H "Authorization: Bearer admin-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"account_ids":["your@icloud.com"],"label":"My Test","create_channel":"icloud"}' \
+  http://127.0.0.1:8080/api/icloud/icloud/mailboxes/create
+~~~
+
+6. 启动自动调度器（每小时同步一次）：
+
+~~~bash
+curl -s -X POST -H "Authorization: Bearer admin-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"account_ids":["your@icloud.com"],"interval_minutes":60}' \
+  http://127.0.0.1:8080/api/icloud/icloud/scheduler/start
+~~~
+
+7. 拉取验证码：
+
+~~~bash
+curl -s "http://127.0.0.1:8080/api/icloud/mailboxes/mb-001/code?keyword=OpenAI&peek=1&wait_ms=12000"
+~~~
+
+### 完整文档
+
+详见 [iCloud 登录验证步骤](./docs/icloud-login-steps.md) 和 [iCloud API 参考](./docs/icloud-api.md)。
 
 ## API
 
