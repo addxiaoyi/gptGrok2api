@@ -18,9 +18,32 @@
         </template>
       </PanelHeader>
 
+      <!-- Bridge offline with retry -->
+      <div v-if="bridge && !bridge.reachable" class="rounded-lg border border-amber-300/70 bg-amber-50/70 p-4 dark:border-amber-800/60 dark:bg-amber-950/20">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">iCloud 模块离线</p>
+            <p class="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-300">
+              请确认 sidecar 已启动：<code class="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-mono dark:bg-amber-900/50">ICLOUD_PRIVACY_MAIL_BASE_URL</code>
+              环境变量配置正确，且服务运行在对应端口。
+            </p>
+            <div v-if="bridge.base_url" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span class="text-muted-foreground">当前地址:</span>
+              <code class="rounded bg-amber-100 px-2 py-1 font-mono text-[10px] dark:bg-amber-900/50">{{ bridge.base_url }}</code>
+              <Button size="xs" variant="outline" @click="retryBridgeCheck">
+                <Icon icon="lucide:refresh-cw" class="h-3 w-3" />
+                重试检测
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <StateBlock v-if="pageError" compact dashed :title="pageErrorTitle" :description="pageError" />
 
       <template v-if="bridge?.reachable">
+        <!-- Process Steps Indicator -->
+        <ProcessSteps :steps="processSteps" @step-click="handleStepClick" />
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div v-for="metric in metrics" :key="metric.label" class="rounded-lg border border-border bg-muted/20 px-3 py-3">
             <p class="text-xs text-muted-foreground">{{ metric.label }}</p>
@@ -63,6 +86,11 @@
                 </div>
                 <div v-if="applePending" class="mt-3 rounded-lg border border-amber-300/60 bg-amber-50/70 p-3 dark:bg-amber-950/20">
                   <p class="text-xs font-medium text-foreground">Apple 要求 2FA：{{ applePending.message || '请输入本次收到的 6 位验证码' }}</p>
+                  <div v-if="appleForm.pending_id && pageError && /Apple (?:协议|服务|登录)/i.test(pageError)" class="mt-2 rounded-md border border-amber-200/80 bg-yellow-50/50 p-2 text-[11px] leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                    <p class="font-semibold">可能的原因与建议</p>
+                    <p v-if="appleErrorHint(pageError)" class="mt-1">{{ appleErrorHint(pageError) }}</p>
+                    <p v-else class="mt-1">请检查 Apple ID 是否正确，验证码是否已过期或输入错误。如仍失败，请先在 Apple 设备上确认信任请求。</p>
+                  </div>
                   <div class="mt-2 flex flex-wrap items-end gap-2">
                     <label class="text-xs"><span class="ui-field-label">验证码</span><Input v-model="appleForm.code" block inputmode="numeric" maxlength="6" placeholder="000000" /></label>
                     <Button size="sm" variant="primary" :disabled="appleBusy || appleForm.code.length < 6" @click="submitApple2fa">{{ appleBusy ? '验证中...' : '提交 2FA' }}</Button>
@@ -149,7 +177,13 @@
             </div>
           </div>
           <div v-if="syncFailures.length" class="mb-4 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-3 dark:border-amber-800/60 dark:bg-amber-950/20">
-            <p class="text-xs font-semibold text-amber-900 dark:text-amber-200">部分 Apple 账号同步失败</p>
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-xs font-semibold text-amber-900 dark:text-amber-200">部分 Apple 账号同步失败</p>
+              <Button size="xs" variant="outline" :disabled="mailboxBusy" @click="retrySyncFailed">
+                <Icon icon="lucide:refresh-cw" class="h-3 w-3" />
+                {{ mailboxBusy ? '重试中...' : '重试全部' }}
+              </Button>
+            </div>
             <div class="mt-2 space-y-2">
               <div v-for="failure in syncFailures" :key="failure.account_id || failure.apple_id || failure.error" class="rounded-md border border-amber-200/80 bg-background/70 px-2.5 py-2 dark:border-amber-900/60">
                 <p class="text-xs font-medium text-foreground">{{ failure.apple_id || failure.account_id || '未知 Apple 账号' }}</p>
@@ -183,7 +217,14 @@
                 <Button size="xs" variant="ghost" :disabled="messageBusyId === mailbox.id || !mailbox.id" @click="toggleMessages(mailbox)">{{ messageBusyId === mailbox.id ? '加载中...' : expandedMailboxId === mailbox.id ? '收起邮件' : '查看邮件' }}</Button>
               </div>
               <div v-if="codeByMailbox[mailbox.id || '']" class="mt-3 flex items-center justify-between rounded-md bg-emerald-50 px-3 py-2 dark:bg-emerald-950/30">
-                <span class="text-xs text-emerald-700 dark:text-emerald-300">最新验证码</span><strong class="font-mono text-lg tracking-[0.2em] text-emerald-800 dark:text-emerald-200">{{ codeByMailbox[mailbox.id || ''] }}</strong>
+                <div>
+                  <p class="text-xs text-emerald-700 dark:text-emerald-300">最新验证码 · {{ mailbox.email }}</p>
+                  <strong class="font-mono text-lg tracking-[0.2em] text-emerald-800 dark:text-emerald-200">{{ codeByMailbox[mailbox.id || ''] }}</strong>
+                </div>
+                <Button size="xs" variant="outline" @click="copyText(codeByMailbox[mailbox.id || ''], '验证码已复制')">
+                  <Icon icon="lucide:copy" class="h-3 w-3" />
+                  复制
+                </Button>
               </div>
               <div v-if="expandedMailboxId === mailbox.id" class="mt-3 space-y-2 border-t border-border pt-3">
                 <div v-for="message in messagesByMailbox[mailbox.id || ''] || []" :key="message.id" class="rounded-md bg-muted/30 p-2.5 text-xs">
@@ -216,6 +257,7 @@ import FormSection from '@/components/ai/FormSection.vue'
 import MetaChip from '@/components/ai/MetaChip.vue'
 import PagePanel from '@/components/ai/PagePanel.vue'
 import PanelHeader from '@/components/ai/PanelHeader.vue'
+import ProcessSteps from '@/components/ai/ProcessSteps.vue'
 import StateBadge from '@/components/ai/StateBadge.vue'
 import StateBlock from '@/components/ai/StateBlock.vue'
 
@@ -269,6 +311,82 @@ const metrics = computed(() => [
   { label: '隐私邮箱', value: mailboxTotal.value },
   { label: '当前页可领取', value: mailboxes.value.filter(mailboxCanClaimAny).length },
 ])
+
+const hasAppleLogin = computed(() => sessions.value.some(session => session.apple_account_login_saved || session.icloud_web_login_saved))
+const hasImapLogin = computed(() => sessions.value.some(session => session.icloud_imap_login_saved))
+
+const processSteps = computed(() => {
+  const steps = [
+    {
+      title: '连接 iCloud 模块',
+      status: bridge.value?.reachable ? 'completed' : 'active',
+      description: bridge.value?.reachable ? 'sidecar 已就绪' : '等待 sidecar 启动',
+    },
+    {
+      title: 'Apple 登录 + 2FA',
+      status: hasAppleLogin.value ? 'completed' : applePending.value || appleBusy.value ? 'active' : 'pending',
+      description: hasAppleLogin.value ? '登录态已保存' : '发起登录并完成双因素验证',
+      action: '去登录',
+    },
+    {
+      title: 'IMAP 取码登录',
+      status: hasImapLogin.value ? 'completed' : hasAppleLogin.value ? 'active' : 'pending',
+      description: hasImapLogin.value ? 'App 专用密码已配置' : '保存 App 专用密码用于接收验证码',
+      action: '配置 IMAP',
+    },
+    {
+      title: '创建隐私邮箱',
+      status: mailboxes.value.length > 0 ? 'completed' : hasImapLogin.value ? 'active' : 'pending',
+      description: mailboxes.value.length > 0 ? `已有 ${mailboxTotal.value} 个邮箱` : '手动或定时创建 HME 邮箱',
+      action: '创建邮箱',
+    },
+    {
+      title: '同步 / 取验证码',
+      status: Object.keys(codeByMailbox).length > 0 ? 'completed' : mailboxes.value.length > 0 ? 'active' : 'pending',
+      description: '同步邮件并提取验证码',
+    },
+  ] as { title: string; status: 'pending' | 'active' | 'completed' | 'error'; description?: string; action?: string }[]
+
+  // 同步失败时最后一步标为 error
+  if (syncFailures.value.length > 0 && steps[steps.length - 1].status !== 'completed') {
+    steps[steps.length - 1] = { ...steps[steps.length - 1], status: 'error', description: `${syncFailures.value.length} 个账号同步失败，点击处理` }
+  }
+
+  return steps
+})
+
+function handleStepClick(step: { title: string; action?: string }) {
+  if (step.title.includes('Apple 登录')) {
+    document.querySelector<HTMLInputElement>('input[autocomplete="username"]')?.focus()
+    return
+  }
+  if (step.title.includes('IMAP')) {
+    document.querySelector<HTMLInputElement>('input[placeholder="name@icloud.com"]')?.focus()
+    return
+  }
+  if (step.title.includes('创建隐私邮箱') || step.title.includes('同步')) {
+    document.querySelector<HTMLElement>('[data-mailbox-section]')?.scrollIntoView({ behavior: 'smooth' })
+  }
+}
+
+async function retryBridgeCheck() {
+  bridge.value = null
+  try {
+    bridge.value = await icloudApi.bridgeStatus()
+  } catch (error) {
+    pageError.value = errorText(error)
+  }
+}
+
+function appleErrorHint(errorText: string): string {
+  if (/locked|锁定/i.test(errorText)) return '账号已被 Apple 锁定，请先在 Apple 官网解锁后再试。'
+  if (/pending|过期|expired/i.test(errorText)) return '2FA 会话已过期，请重新发起登录。'
+  if (/verification|验证码|code/i.test(errorText) && /invalid|incorrect|错误|mismatch/i.test(errorText)) return '验证码不正确，请确认输入的是最新一条 6 位数字，并检查选择的验证码方式（受信任设备 / 短信）是否与实际接收渠道一致。'
+  if (/password|密码/i.test(errorText)) return 'Apple ID 或密码错误，或该账号被限制登录。'
+  if (/rate|frequen|频繁|too many/i.test(errorText)) return '尝试过于频繁，请稍后再试。'
+  if (/not trusted|未信任/i.test(errorText)) return '设备未被信任，请在 Apple 设备上确认信任请求。'
+  return ''
+}
 
 function mailboxCanClaimAny(mailbox: ICloudMailbox) {
   return Boolean(mailbox.api_active && mailbox.icloud_active && mailbox.status === 'available' && !(mailbox.openai_claimed && mailbox.grok_claimed))
@@ -624,8 +742,35 @@ async function syncMailbox(mailbox: ICloudMailbox) {
   mailboxBusy.value = true
   try {
     await icloudApi.syncMailbox(mailbox.id)
-    await toggleMessages(mailbox, true)
+    // 同步后自动展开消息列表并加载最新邮件
+    expandedMailboxId.value = mailbox.id
+    messageBusyId.value = mailbox.id
+    try {
+      const result = await icloudApi.listMessages(mailbox.id)
+      messagesByMailbox[mailbox.id] = result.messages || []
+    } catch {
+      // 消息加载失败不影响同步结果提示
+    } finally {
+      messageBusyId.value = ''
+    }
     notice.value = `${mailbox.email || '邮箱'} 已同步`
+    // 从失败列表中移除该邮箱
+    syncFailures.value = syncFailures.value.filter(f => f.account_id !== mailbox.account_id)
+  } catch (error) {
+    pageError.value = errorText(error)
+  } finally {
+    mailboxBusy.value = false
+  }
+}
+
+async function retrySyncFailed() {
+  if (syncFailures.value.length === 0) return
+  mailboxBusy.value = true
+  try {
+    const result = await icloudApi.syncMailboxes({})
+    syncFailures.value = (result.results || []).filter(item => String(item.error || '').trim())
+    notice.value = `重试完成，剩余 ${syncFailures.value.length} 个失败账号`
+    await loadData()
   } catch (error) {
     pageError.value = errorText(error)
   } finally {

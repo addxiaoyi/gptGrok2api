@@ -169,7 +169,7 @@ curl -s "http://127.0.0.1:8080/api/icloud/mailboxes/mb-001/code?keyword=OpenAI&p
 
 ### 完整文档
 
-详见 [iCloud 登录验证步骤](./docs/icloud-login-steps.md) 和 [iCloud API 参考](./docs/icloud-api.md)。
+详见 [iCloud 登录验证步骤](./BEGINNER_UBUNTU_SETUP.md) 和 [iCloud API 参考](./docs/AUTO_UPLOAD_SUB2API_CPA.md)。
 
 ## API
 
