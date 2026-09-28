@@ -73,6 +73,9 @@ func TestICloudProxyPassthrough(t *testing.T) {
 		if r.Header.Get("X-ICloud-Probe") != "1" {
 			t.Errorf("upstream lost request header: %#v", r.Header)
 		}
+		if r.Header.Get("X-ChatGPT2API-Internal") != "icloud-privacy-mail" {
+			t.Errorf("upstream did not receive internal marker header")
+		}
 		w.Header().Set("X-ICloud-Upstream", "yes")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok":true}`))

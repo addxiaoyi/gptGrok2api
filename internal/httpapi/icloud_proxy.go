@@ -137,6 +137,8 @@ func (s *Server) icloudProxy(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Authorization", "Bearer "+key)
 		req.Header.Set("X-API-Key", key)
 	}
+	// sidecar 用这个头识别主后端内部调用，从而跳过它自己的会话/全局 API Key 校验
+	req.Header.Set("X-ChatGPT2API-Internal", "icloud-privacy-mail")
 
 	resp, err := s.requestClient.Do(req)
 	if err != nil {
