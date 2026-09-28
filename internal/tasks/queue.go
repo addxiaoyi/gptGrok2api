@@ -29,11 +29,14 @@ type Queue struct {
 	items    map[string]*Task
 	wake     chan struct{}
 	handlers map[string]func(*Task) (map[string]any, error)
+	stop     chan struct{}
+	stopped  bool
 }
 
 type QueueAPI interface {
 	Register(string, func(*Task) (map[string]any, error))
 	Start(int)
+	Stop()
 	Submit(string, map[string]any) *Task
 	Get(string) (Task, bool)
 	Cancel(string) bool
@@ -41,7 +44,7 @@ type QueueAPI interface {
 }
 
 func New(path string) *Queue {
-	q := &Queue{path: path, items: map[string]*Task{}, wake: make(chan struct{}, 1), handlers: map[string]func(*Task) (map[string]any, error){}}
+	q := &Queue{path: path, items: map[string]*Task{}, wake: make(chan struct{}, 1), stop: make(chan struct{}), handlers: map[string]func(*Task) (map[string]any, error){}}
 	_ = q.load()
 	return q
 }
@@ -63,15 +66,34 @@ func (q *Queue) Start(workers int) {
 	q.signal()
 }
 
+// Stop 让所有 worker 退出。重复调用安全。
+func (q *Queue) Stop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopped {
+		return
+	}
+	q.stopped = true
+	close(q.stop)
+}
+
 func (q *Queue) Submit(kind string, payload map[string]any) *Task {
 	now := time.Now().Unix()
-	task := &Task{ID: taskID(), Kind: kind, Status: "queued", Payload: payload, CreatedAt: now, UpdatedAt: now}
+	task := &Task{
+		ID:        taskID(),
+		Kind:      kind,
+		Status:    "queued",
+		Payload:   payload,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
 	q.mu.Lock()
 	q.items[task.ID] = task
 	_ = q.saveLocked()
+	cloned := clone(task)
 	q.mu.Unlock()
 	q.signal()
-	return clone(task)
+	return cloned
 }
 
 func (q *Queue) Get(id string) (Task, bool) {
@@ -121,25 +143,32 @@ func (q *Queue) worker() {
 				}
 			}
 		}
+		var job *Task
 		if selected != nil {
 			selected.Status = "running"
 			selected.UpdatedAt = time.Now().Unix()
+			job = clone(selected)
 			_ = q.saveLocked()
 		}
 		handler := func(*Task) (map[string]any, error) { return nil, errors.New("no task handler") }
-		if selected != nil {
-			if current, ok := q.handlers[selected.Kind]; ok {
+		if job != nil {
+			if current, ok := q.handlers[job.Kind]; ok {
 				handler = current
 			}
 		}
 		q.mu.Unlock()
-		if selected == nil {
-			<-q.wake
+		if job == nil {
+			select {
+			case <-q.stop:
+				return
+			case <-q.wake:
+			}
 			continue
 		}
-		result, err := handler(selected)
+		// handler 只拿克隆副本，避免与 queue 内的活对象并发读写
+		result, err := handler(job)
 		q.mu.Lock()
-		if current, ok := q.items[selected.ID]; ok && current.Status == "running" {
+		if current, ok := q.items[job.ID]; ok && current.Status == "running" {
 			current.UpdatedAt = time.Now().Unix()
 			if err != nil {
 				current.Status = "failed"
@@ -177,8 +206,7 @@ func (q *Queue) load() error {
 		if task.Status == "running" {
 			task.Status = "queued"
 		}
-		copy := task
-		q.items[task.ID] = &copy
+		q.items[task.ID] = clone(&task)
 	}
 	return nil
 }

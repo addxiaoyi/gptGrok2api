@@ -1,0 +1,36 @@
+# 子项目各自的构建产物与依赖
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[oc]
+*.egg-info
+.venv/
+venv/
+
+# 二进制与归档
+*.exe
+*.tar.gz
+*.zip
+
+# 子项目本地配置（可能含密钥）
+.env
+.env.local
+config.json
+
+# 运行时产物目录
+logs/
+*.log
+screenshots/
+
+# Docker 构建缓存
+.docker-build-cache/
+
+# grok-register 运行时数据（容器内持久化）
+data/grok-register/output/
+data/grok-register/logs/
+data/grok-register/cpa_auths/
+data/grok-register/screenshots/
+data/grok-register/accounts_*.txt
+data/grok-register/accounts_*.txt.pending.jsonl
+data/grok-register/token.json

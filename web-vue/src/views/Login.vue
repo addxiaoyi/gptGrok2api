@@ -65,7 +65,7 @@ async function handleLogin() {
       return
     }
     await router.push(authStore.isUser ? { name: 'studio' } : { name: 'dashboard' })
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error.message || '登录失败，请检查密码。')
   } finally {
     isLoading.value = false

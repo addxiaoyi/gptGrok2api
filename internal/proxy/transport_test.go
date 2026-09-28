@@ -14,6 +14,70 @@ import (
 	"time"
 )
 
+func TestNormalizeURLDefaultsBareHostToHTTP(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "带协议原样返回", input: "socks5://one.invalid:1080", want: "socks5://one.invalid:1080"},
+		{name: "裸地址补 http", input: "one.invalid:8080", want: "http://one.invalid:8080"},
+		{name: "首尾空白被裁掉", input: "  http://one.invalid:8080  ", want: "http://one.invalid:8080"},
+		{name: "direct 表示直连", input: "direct", want: ""},
+		{name: "空串表示直连", input: "", want: ""},
+		{name: "纯空白表示直连", input: "   ", want: ""},
+		{name: "无主机名的值被丢弃", input: "http://", want: ""},
+		{name: "无法解析的值被丢弃", input: "://nope", want: ""},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := normalizeURL(testCase.input); got != testCase.want {
+				t.Fatalf("normalizeURL(%q) = %q, want %q", testCase.input, got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestNormalizePoolDropsInvalidEntries(t *testing.T) {
+	got := normalizePool([]string{
+		"  http://one.invalid:8080  ",
+		"",
+		"direct",
+		"   ",
+		"two.invalid:8080",
+		"socks5://three.invalid:1080",
+	})
+	want := []string{"http://one.invalid:8080", "http://two.invalid:8080", "socks5://three.invalid:1080"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected pool size: %#v", got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("pool entry %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestNormalizePoolAllInvalidReturnsEmptyPool(t *testing.T) {
+	if got := normalizePool([]string{"", "direct", "   "}); len(got) != 0 {
+		t.Fatalf("expected empty pool, got %#v", got)
+	}
+	if got := normalizePool(nil); len(got) != 0 {
+		t.Fatalf("expected empty pool for nil input, got %#v", got)
+	}
+}
+
+func TestSetDefaultResetsPoolCursor(t *testing.T) {
+	manager := NewManager("", []string{"http://one.invalid:8080", "http://two.invalid:8080"})
+	if first := manager.Resolve(nil, false); first != "http://one.invalid:8080" {
+		t.Fatalf("unexpected first rotation: %q", first)
+	}
+	manager.SetDefault("http://default.invalid:8080", []string{"http://three.invalid:8080"})
+	if got := manager.Resolve(nil, false); got != "http://three.invalid:8080" {
+		t.Fatalf("pool replacement did not restart rotation: %q", got)
+	}
+}
+
 func TestManagerUsesAccountThenRotatesPool(t *testing.T) {
 	manager := NewManager("http://single.invalid:8080", []string{"http://one.invalid:8080", "http://two.invalid:8080"})
 	if got := manager.Resolve(map[string]any{"proxy": "socks5://account.invalid:1080"}, false); got != "socks5://account.invalid:1080" {

@@ -1,0 +1,35 @@
+services:
+  grok-register:
+    build:
+      context: ..
+      dockerfile: integrations/Dockerfile.grok-register
+    image: chatgpt2api-grok-register:local
+    container_name: chatgpt2api-grok-register
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GROK_REGISTER_PORT:-8092}:8092"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      # 运行时数据放仓库根 data/（与 ./data/redis 等既有惯例一致），
+      # 不进入 integrations/grok-register，保持 submodule 工作区纯净
+      - ../data/grok-register/config.json:/app/config.json
+      - ../data/grok-register/output:/app/output
+      - ../data/grok-register/cpa_auths:/app/cpa_auths
+      - ../data/grok-register/screenshots:/app/screenshots
+      - ../data/grok-register/logs:/app/logs
+      - ../data/grok-register/proxies.txt:/app/proxies.txt:ro
+      - ../data/grok-register/sso_risk_rejected.txt:/app/sso_risk_rejected.txt
+    networks:
+      default:
+        aliases:
+          - grok-register
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8092/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s

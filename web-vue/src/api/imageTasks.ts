@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { toNonNegativeInt } from '@/lib/numbers'
 
 export type ImageTaskStatus = 'queued' | 'running' | 'success' | 'error'
 export type ImageTaskMode = 'generate' | 'edit'
@@ -325,7 +326,7 @@ function normalizeResponse(response: Partial<ImageTasksResponse>): ImageTasksRes
 }
 
 function numberValue(value: unknown) {
-  return Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : 0
+  return toNonNegativeInt(value)
 }
 
 function normalizeQuotaSummary(response: Partial<ImageQuotaSummary>): ImageQuotaSummary {

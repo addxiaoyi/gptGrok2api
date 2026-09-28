@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type RedisQueue struct {
 	prefix   string
 	mu       sync.Mutex
 	handlers map[string]func(*Task) (map[string]any, error)
+	stop     chan struct{}
 }
 
 func NewRedis(addr, password string, database int, prefix string) *RedisQueue {
@@ -36,7 +38,25 @@ func NewRedis(addr, password string, database int, prefix string) *RedisQueue {
 	if strings.TrimSpace(prefix) == "" {
 		prefix = "gptgrok2api"
 	}
-	return &RedisQueue{addr: addr, password: password, database: database, prefix: prefix, handlers: map[string]func(*Task) (map[string]any, error){}}
+	return &RedisQueue{addr: addr, password: password, database: database, prefix: prefix, handlers: map[string]func(*Task) (map[string]any, error){}, stop: make(chan struct{})}
+}
+
+const (
+	// redisOpTimeout 覆盖普通单次往返。缺失 deadline 会让 socket 无限等待，
+	// Redis 假死时 worker 会被永久拖住。
+	redisOpTimeout = 5 * time.Second
+	// redisBlockTimeout 必须大于 BLPOP 的阻塞时长，否则连接会先于命令返回而超时。
+	redisBlockTimeout = 8 * time.Second
+)
+
+// opCtx 为单次命令派生带超时的 context。
+func opCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), redisOpTimeout)
+}
+
+// blockCtx 供 BLPOP/BRPOP 这类长阻塞命令使用。
+func blockCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), redisBlockTimeout)
 }
 
 func (q *RedisQueue) Ping() error {
@@ -62,11 +82,24 @@ func (q *RedisQueue) Start(workers int) {
 	}
 }
 
+// Stop 让所有 worker 退出。重复调用安全。
+func (q *RedisQueue) Stop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	select {
+	case <-q.stop:
+	default:
+		close(q.stop)
+	}
+}
+
 // recoverRunning returns tasks whose worker disappeared before it could write
 // a terminal state back to Redis. BLPOP removes a task from the queue, so a
 // running task must be explicitly put back before workers start.
 func (q *RedisQueue) recoverRunning() {
-	raw, err := q.command(context.Background(), "SMEMBERS", q.indexKey())
+	ctx, cancel := opCtx()
+	defer cancel()
+	raw, err := q.command(ctx, "SMEMBERS", q.indexKey())
 	if err != nil {
 		return
 	}
@@ -85,19 +118,25 @@ func (q *RedisQueue) recoverRunning() {
 		}
 		task.Status = "queued"
 		task.UpdatedAt = time.Now().Unix()
-		_ = q.save(&task)
+		if err := q.Save(&task); err != nil {
+			log.Printf("recoverRunning: save task %s failed: %v", id, err)
+		}
 	}
 }
 
 func (q *RedisQueue) Submit(kind string, payload map[string]any) *Task {
 	now := time.Now().Unix()
 	task := &Task{ID: taskID(), Kind: kind, Status: "queued", Payload: payload, CreatedAt: now, UpdatedAt: now}
-	_ = q.save(task)
+	if err := q.Save(task); err != nil {
+		log.Printf("Submit: save task failed: %v", err)
+	}
 	return clone(task)
 }
 
 func (q *RedisQueue) Get(id string) (Task, bool) {
-	raw, err := q.command(context.Background(), "GET", q.taskKey(id))
+	ctx, cancel := opCtx()
+	defer cancel()
+	raw, err := q.command(ctx, "GET", q.taskKey(id))
 	if err != nil || raw == nil {
 		return Task{}, false
 	}
@@ -115,11 +154,13 @@ func (q *RedisQueue) Cancel(id string) bool {
 	}
 	task.Status = "cancelled"
 	task.UpdatedAt = time.Now().Unix()
-	return q.save(&task) == nil
+	return q.Save(&task) == nil
 }
 
 func (q *RedisQueue) List() []Task {
-	raw, err := q.command(context.Background(), "SMEMBERS", q.indexKey())
+	ctx, cancel := opCtx()
+	defer cancel()
+	raw, err := q.command(ctx, "SMEMBERS", q.indexKey())
 	if err != nil {
 		return []Task{}
 	}
@@ -135,10 +176,23 @@ func (q *RedisQueue) List() []Task {
 
 func (q *RedisQueue) worker() {
 	for {
-		raw, err := q.command(context.Background(), "BLPOP", q.queueKey(), "5")
+		select {
+		case <-q.stop:
+			return
+		default:
+		}
+		// BLPOP 使用 blockCtx 确保 timeout 可靠停止
+		ctx, cancel := blockCtx()
+		raw, err := q.command(ctx, "BLPOP", q.queueKey(), "5")
+		cancel()
 		if err != nil {
-			time.Sleep(time.Second)
-			continue
+			select {
+			case <-q.stop:
+				return
+			default:
+				time.Sleep(time.Second)
+				continue
+			}
 		}
 		values, ok := raw.([]any)
 		if !ok || len(values) < 2 {
@@ -151,7 +205,10 @@ func (q *RedisQueue) worker() {
 		}
 		task.Status = "running"
 		task.UpdatedAt = time.Now().Unix()
-		_ = q.save(&task)
+		if err := q.Save(&task); err != nil {
+			log.Printf("worker: save task %s running status failed: %v", id, err)
+			continue
+		}
 		q.mu.Lock()
 		handler := q.handlers[task.Kind]
 		q.mu.Unlock()
@@ -175,23 +232,33 @@ func (q *RedisQueue) worker() {
 			current.Progress = 100
 			current.Result = result
 		}
-		_ = q.save(&current)
+		if err := q.Save(&current); err != nil {
+			log.Printf("worker: save task %s final status failed: %v", id, err)
+		}
 	}
 }
 
-func (q *RedisQueue) save(task *Task) error {
+// Save 是 save 的公开包装，统一加超时。
+// 原 save(t) 已被内部调用改为 Save(t)。
+func (q *RedisQueue) Save(task *Task) error {
 	raw, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}
-	if _, err := q.command(context.Background(), "SET", q.taskKey(task.ID), string(raw), "EX", "604800"); err != nil {
+	ctx, cancel := opCtx()
+	defer cancel()
+	if _, err := q.command(ctx, "SET", q.taskKey(task.ID), string(raw), "EX", "604800"); err != nil {
 		return err
 	}
-	_, _ = q.command(context.Background(), "SADD", q.indexKey(), task.ID)
+	ctx2, cancel2 := opCtx()
+	defer cancel2()
+	_, _ = q.command(ctx2, "SADD", q.indexKey(), task.ID)
 	if task.Status == "queued" {
-		_, err = q.command(context.Background(), "RPUSH", q.queueKey(), task.ID)
+		ctx3, cancel3 := opCtx()
+		defer cancel3()
+		_, _ = q.command(ctx3, "RPUSH", q.queueKey(), task.ID)
 	}
-	return err
+	return nil
 }
 
 func (q *RedisQueue) taskKey(id string) string { return q.prefix + ":task:" + id }

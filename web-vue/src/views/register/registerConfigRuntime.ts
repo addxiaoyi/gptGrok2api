@@ -4,6 +4,7 @@ import { proxyApi, type ProxyGroup } from '@/api/proxy'
 import { registerApi, type LegacyRegisterConfig } from '@/api/register'
 import { usePageQuery } from '@/composables/usePageQuery'
 import type { PageRuntime } from '@/composables/usePageRuntime'
+import { errorMessage } from '@/lib/errorMessage'
 import {
   legacyRegisterPayload,
   normalizeRegisterConfig,
@@ -217,8 +218,8 @@ export function useRegisterConfigRuntime(input: RegisterConfigRuntimeInput) {
         }
         if (notify) input.notifySuccess('注册配置已自动保存')
         return true
-      } catch (error: any) {
-        const message = error?.message || '自动保存注册配置失败'
+      } catch (error) {
+        const message = errorMessage(error, '自动保存注册配置失败')
         autosaveStatus.value = 'error'
         autosaveMessage.value = message
         if (notify) input.notifyError(message)
@@ -315,8 +316,8 @@ export function useRegisterConfigRuntime(input: RegisterConfigRuntimeInput) {
       applyConfig(response.register)
       input.notifySuccess(starting ? '注册任务已启动' : '注册任务已停止')
       if (starting) input.startLiveUpdates?.()
-    } catch (error: any) {
-      input.notifyError(error?.message || '切换注册任务失败')
+    } catch (error) {
+      input.notifyError(errorMessage(error, '切换注册任务失败'))
     } finally {
       saving.value = false
     }
@@ -334,8 +335,8 @@ export function useRegisterConfigRuntime(input: RegisterConfigRuntimeInput) {
       const response = await registerApi.resetLegacy()
       applyConfig(response.register)
       input.notifySuccess('注册统计已重置')
-    } catch (error: any) {
-      input.notifyError(error?.message || '重置注册统计失败')
+    } catch (error) {
+      input.notifyError(errorMessage(error, '重置注册统计失败'))
     } finally {
       saving.value = false
     }

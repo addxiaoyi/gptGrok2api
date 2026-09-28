@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestGPTMailPublicStatusAndKeyRefreshRedactKey(t *testing.T) {
@@ -55,5 +57,92 @@ func TestGPTMailCustomStatusUsesAPIKeyAndUsage(t *testing.T) {
 	}
 	if result["source"] != "stats" || result["remaining_today"] != float64(43) || result["key_hint"] != "custo...cret" {
 		t.Fatalf("unexpected custom result: %#v", result)
+	}
+}
+
+func TestNewGPTMailNilClient(t *testing.T) {
+	client := NewGPTMail(nil)
+	if client.HTTP == nil {
+		t.Fatal("expected default HTTP client")
+	}
+	if client.HTTP.Timeout != 30*time.Second {
+		t.Fatalf("expected 30s timeout, got %s", client.HTTP.Timeout)
+	}
+	if client.cache == nil {
+		t.Fatal("expected initialized cache map")
+	}
+}
+
+func TestNewGPTMailWithClient(t *testing.T) {
+	hc := &http.Client{Timeout: 5 * time.Second}
+	client := NewGPTMail(hc)
+	if client.HTTP != hc {
+		t.Fatal("expected the provided client")
+	}
+}
+
+func TestGPTMailMaskKey(t *testing.T) {
+	if got := gptMailMaskKey(""); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+	if got := gptMailMaskKey("abc"); got != "***" {
+		t.Fatalf("short: %q", got)
+	}
+	if got := gptMailMaskKey("12345678"); got != "********" {
+		t.Fatalf("len8: %q", got)
+	}
+	if got := gptMailMaskKey("abcdefghij"); got != "abcde...ghij" {
+		t.Fatalf("len10: %q", got)
+	}
+}
+
+func TestGPTMailRefreshPublicKeyRejectsCustomMode(t *testing.T) {
+	client := NewGPTMail(nil)
+	_, err := client.RefreshPublicKey(context.Background(), map[string]any{"key_mode": "custom", "api_key": "k"}, false)
+	if err == nil {
+		t.Fatal("expected error for custom mode refresh")
+	}
+}
+
+func TestGPTMailRefreshPublicKeyMissingKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"is_active": true}})
+	}))
+	defer server.Close()
+	client := NewGPTMail(server.Client())
+	_, err := client.RefreshPublicKey(context.Background(), map[string]any{"api_base": server.URL, "key_mode": "public"}, true)
+	if err == nil {
+		t.Fatal("expected error when public key is empty")
+	}
+}
+
+func TestMapValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  map[string]any
+	}{
+		{"nil input", nil, map[string]any{}},
+		{"empty map", map[string]any{}, map[string]any{}},
+		{"valid map", map[string]any{"key": "value"}, map[string]any{"key": "value"}},
+		{"nested map", map[string]any{"outer": map[string]any{"inner": 1}}, map[string]any{"outer": map[string]any{"inner": 1}}},
+		{"string input", "not a map", map[string]any{}},
+		{"int input", 42, map[string]any{}},
+		{"slice input", []any{1, 2, 3}, map[string]any{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapValue(tt.input)
+			if got == nil {
+				t.Fatal("mapValue returned nil")
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("length mismatch: got %d, want %d", len(got), len(tt.want))
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("got %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }

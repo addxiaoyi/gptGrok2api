@@ -2,6 +2,8 @@ import type { Account, AccountGroup, AccountLane } from '@/api/accounts'
 import type { ProxyGroup } from '@/api/proxy'
 import { parseProxyReference, proxyReferenceLabel } from '@/api/proxy'
 import { PILL_TONE_CLASS } from '@/lib/pillTones'
+import { toNonNegativeInt } from '@/lib/numbers'
+import { formatDateTimeFromSeconds } from '@/lib/time'
 
 export type QuotaKey = 'fast' | 'thinking' | 'pro' | 'image' | 'music' | 'video'
 export type AccountStatusFilter = 'all' | 'normal' | 'limited' | 'abnormal' | 'disabled'
@@ -149,8 +151,7 @@ function normalizeLimit(value: unknown): number {
 }
 
 function normalizeUsed(value: unknown): number {
-  const n = Number(value)
-  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+  return toNonNegativeInt(value)
 }
 
 function buildQuotaLine(used: number, limit: number): QuotaLine {
@@ -167,14 +168,7 @@ function buildQuotaLine(used: number, limit: number): QuotaLine {
 }
 
 function formatDateTime(timestampSeconds: number): string {
-  const date = new Date(timestampSeconds * 1000)
-  if (Number.isNaN(date.getTime())) return '-'
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mi = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
+  return formatDateTimeFromSeconds(timestampSeconds)
 }
 
 export function formatAccountDate(timestampSeconds?: number): string {

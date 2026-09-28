@@ -9,6 +9,9 @@
           <MetaChip v-if="registerConfig" size="sm" :tone="autosaveTone" :title="autosaveMessage">
             {{ autosaveLabel }}
           </MetaChip>
+          <Button size="sm" variant="outline" @click="openGrokRegister">
+            Grok 注册机
+          </Button>
         </template>
       </PanelHeader>
 
@@ -200,6 +203,10 @@ const pageRuntime = usePageRuntime('register')
 const grokExportBusy = ref(false)
 const checkoutRetryStopping = ref(false)
 const checkoutHistoryClearing = ref(false)
+
+function openGrokRegister() {
+  router.push({ name: 'grok-register' })
+}
 
 const registerConfigRuntime = useRegisterConfigRuntime({
   runtime: pageRuntime,
@@ -394,7 +401,7 @@ async function exportGrokAccounts(format: 'cpa' | 'sub2api') {
     if (!blob.size) throw new Error('导出文件为空')
     saveBlob(blob, grokExportFilename(format))
     toast.success(`${formatLabel} 已导出`)
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '导出 Grok 账号失败')
   } finally {
     grokExportBusy.value = false
@@ -415,7 +422,7 @@ async function stopCheckoutRetries() {
     const response = await registerApi.stopCheckoutRetries()
     applyRegisterConfig(response.register)
     toast.success('持续提链已停止')
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '停止持续提链失败')
   } finally {
     checkoutRetryStopping.value = false
@@ -435,7 +442,7 @@ async function clearCheckoutHistory() {
     const response = await registerApi.clearCheckoutHistory()
     applyRegisterRuntimeConfig(response.register)
     toast.success(`已清空 ${response.removed || 0} 条提链历史`)
-  } catch (error: any) {
+  } catch (error) {
     toast.error(error?.message || '清空提链历史失败')
   } finally {
     checkoutHistoryClearing.value = false

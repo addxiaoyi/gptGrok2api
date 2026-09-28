@@ -636,6 +636,11 @@ const menuItems = [
     icon: 'M7 3h10a2 2 0 0 1 2 2v3h-2V5H7v14h10v-3h2v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm8.6 5.4L20.2 13l-4.6 4.6-1.4-1.4 2.2-2.2H9v-2h7.4l-2.2-2.2 1.4-1.4z',
   },
   {
+    path: '/grok-register',
+    label: 'Grok 注册机',
+    icon: 'M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4zm0 2.2 6 3v4.8c0 3.9-2.5 7.3-6 7.9-3.5-.6-6-4-6-7.9V7.2l6-3zm-1 3.3v5.1h-5v2h5v5.1h2v-5.1h5v-2h-5V7.5h-2z',
+  },
+  {
     path: '/icloud',
     label: 'iCloud 邮箱',
     icon: 'M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9zm8 1.8L6.2 6.1 4.9 6.8 12 10.9l7.1-4.1-1.3-.7L12 9.3zm-6 1.8v4.2l5 2.8v-4.2l-5-2.8zm7 2.8v4.2l5-2.8v-4.2l-5 2.8z',
@@ -677,6 +682,7 @@ const routeTitleMap: Record<string, string> = {
   gallery: '图片管理',
   proxy: '代理管理',
   register: '注册账号',
+  'grok-register': 'Grok 注册机',
   icloud: 'iCloud 邮箱',
   settings: '系统设置',
   debug: '调试中心',
@@ -989,7 +995,7 @@ async function checkForUpdates(showMessage = true) {
       if (isNewerVersion(latestVersionLabel.value, currentVersionLabel.value)) toast.info(message)
       else toast.success(message)
     }
-  } catch (error: any) {
+  } catch (error) {
     updateCheckMessage.value = 'GitHub 版本检查失败，当前展示本地更新日志。'
     if (showMessage) {
       toast.warning(error?.message || 'GitHub 版本检查失败')

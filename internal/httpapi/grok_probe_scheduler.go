@@ -14,6 +14,8 @@ func (s *Server) grokProbeScheduler() {
 		config := s.registerStore.GrokProbeSchedulerStatus()
 		if !boolValue(config["enabled"], false) {
 			select {
+			case <-s.shutdown:
+				return
 			case <-s.probeStop:
 				return
 			case <-s.probeWake:
@@ -36,6 +38,9 @@ func (s *Server) grokProbeScheduler() {
 		_ = s.registerStore.UpdateGrokProbeSchedulerRuntime(false, next, stringValue(config["last_finished_at"]), "")
 		timer := time.NewTimer(30 * time.Second)
 		select {
+		case <-s.shutdown:
+			timer.Stop()
+			return
 		case <-s.probeStop:
 			timer.Stop()
 			return

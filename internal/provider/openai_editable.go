@@ -461,13 +461,29 @@ func editableExtension(kind, contentType string) string {
 }
 
 func sanitizeEditableName(value string) string {
-	return strings.TrimSpace(strings.ReplaceAll(filepath.Base(value), "\x00", ""))
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	base := strings.TrimSpace(strings.ReplaceAll(filepath.Base(value), "\x00", ""))
+	// filepath.Base collapses empty and root-ish inputs to "." or "/", which are
+	// never usable download names, so report them as "not found" instead.
+	if base == "." || base == string(filepath.Separator) {
+		return ""
+	}
+	return base
 }
 
 func contentDispositionName(value string) string {
 	_, params, err := mime.ParseMediaType(value)
 	if err != nil {
 		return ""
+	}
+	if name, ok := params["filename"]; ok {
+		name = strings.TrimSpace(name)
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			return ""
+		}
 	}
 	return sanitizeEditableName(params["filename"])
 }

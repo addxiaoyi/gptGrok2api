@@ -371,7 +371,7 @@ async function runSearch() {
   searchResult.value = null
   try {
     searchResult.value = await debugApi.search(prompt)
-  } catch (error: any) {
+  } catch (error) {
     searchError.value = error?.message || '搜索失败'
   } finally {
     searchElapsedMs.value = Date.now() - startedAt
@@ -394,7 +394,7 @@ async function sendChat() {
       ...nextMessages,
       { role: 'assistant', content: String(result.choices?.[0]?.message?.content || '') },
     ]
-  } catch (error: any) {
+  } catch (error) {
     chatError.value = error?.message || '发送失败'
   } finally {
     chatLoading.value = false
@@ -431,7 +431,7 @@ async function refreshEditableTasks() {
   try {
     const response = await debugApi.listEditableFileTasks()
     editableTasks.value = (response.items || []).filter((task) => task.kind === currentEditableKind.value).slice(0, 20)
-  } catch (error: any) {
+  } catch (error) {
     editableError.value = error?.message || '任务加载失败'
   } finally {
     editableFetching.value = false
@@ -448,7 +448,7 @@ async function submitEditableTask() {
     const task = await debugApi.createEditableFileTask(currentEditableKind.value, { prompt, base64_images: images })
     editableTasks.value = [task, ...editableTasks.value].slice(0, 20)
     toast.success('任务已提交')
-  } catch (error: any) {
+  } catch (error) {
     editableError.value = error?.message || '提交失败'
   } finally {
     editableSubmitting.value = false

@@ -1,5 +1,6 @@
 ﻿import apiClient from './client'
 import type { ProxyGroup } from './proxy'
+import { toOptionalNonNegativeInt } from '@/lib/numbers'
 
 export type AccountLane = 'fast' | 'thinking' | 'pro'
 export type AccountBackendStatus = '正常' | '限流' | '异常' | '禁用'
@@ -417,9 +418,7 @@ function normalizeCheckoutLinkStatus(value: unknown): CheckoutLinkStatus {
 }
 
 function optionalNonNegativeInteger(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === '') return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : undefined
+  return toOptionalNonNegativeInt(value)
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {

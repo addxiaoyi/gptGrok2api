@@ -1,5 +1,7 @@
 import type { GrokAccount } from '@/api/grokAccounts'
 import { PILL_TONE_CLASS } from '@/lib/pillTones'
+import { toNonNegativeInt } from '@/lib/numbers'
+import { formatTimestamp } from '@/lib/time'
 
 function cleanString(value: unknown): string {
   return String(value || '').trim()
@@ -334,19 +336,7 @@ export function grokAccountPoolText(item: GrokAccount): string {
 }
 
 export function formatGrokAccountDate(value: unknown): string {
-  const raw = cleanString(value)
-  if (!raw) return '-'
-  const numeric = Number(raw)
-  const date = Number.isFinite(numeric) && numeric > 0
-    ? new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000)
-    : new Date(raw)
-  if (Number.isNaN(date.getTime())) return raw
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mi = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
+  return formatTimestamp(value)
 }
 
 type GrokQuotaMode = 'auto' | 'fast' | 'expert' | 'heavy' | 'console'
@@ -360,11 +350,11 @@ const GROK_QUOTA_MODE_LABELS: Record<GrokQuotaMode, string> = {
 }
 
 function quotaRemaining(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.trunc(value))
+  if (typeof value === 'number' && Number.isFinite(value)) return toNonNegativeInt(value)
   if (!value || typeof value !== 'object') return null
   const source = value as Record<string, unknown>
   const remaining = Number(source.remaining)
-  return Number.isFinite(remaining) ? Math.max(0, Math.trunc(remaining)) : null
+  return Number.isFinite(remaining) ? toNonNegativeInt(remaining) : null
 }
 
 export function grokQuotaEntries(item: GrokAccount): Array<{ key: GrokQuotaMode; label: string; remaining: number }> {

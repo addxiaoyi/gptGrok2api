@@ -84,6 +84,7 @@ import ModalHeader from '@/components/ai/ModalHeader.vue'
 import ModalShell from '@/components/ai/ModalShell.vue'
 import SurfaceBox from '@/components/ai/SurfaceBox.vue'
 import { errorMessage } from '@/lib/errorMessage'
+import { toNonNegativeInt } from '@/lib/numbers'
 import { formatGrokAccountDate } from './grokAccountView'
 
 const DEFAULT_MODEL = 'grok-4.3-console'
@@ -111,8 +112,7 @@ const model = ref(DEFAULT_MODEL)
 const hasResult = computed(() => Boolean(resultContent.value))
 const consoleQuota = computed(() => props.account?.quota?.console || null)
 function quotaNumber(value: unknown): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0
+  return toNonNegativeInt(value)
 }
 
 const consoleQuotaTotal = computed(() => quotaNumber(consoleQuota.value?.total))

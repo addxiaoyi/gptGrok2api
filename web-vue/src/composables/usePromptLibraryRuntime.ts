@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { promptsApi, type PromptLibraryItem, type PromptLibraryResponse, type PromptSource } from '@/api/prompts'
+import { errorMessage } from '@/lib/errorMessage'
 import { firstPromptPreviewUrl, markPromptPreviewBroken } from '@/lib/promptAssets'
 import {
   ALL_PROMPT_CATEGORY,
@@ -49,8 +50,8 @@ export async function preloadPromptLibrary(force = false) {
     const result = await request
     applyPromptLibrary(result)
     return true
-  } catch (error: any) {
-    state.loadError.value = error?.message || '提示词加载失败，请稍后重试。'
+  } catch (error) {
+    state.loadError.value = errorMessage(error, '提示词加载失败，请稍后重试。')
     return false
   } finally {
     if (promptLibraryRequest === request) promptLibraryRequest = null

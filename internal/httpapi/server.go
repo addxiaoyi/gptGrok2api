@@ -77,9 +77,12 @@ type Server struct {
 	survivalStatus     map[string]any
 	survivalRunning    bool
 	survivalWake       chan struct{}
-	probeStop          chan struct{}
-	probeWake          chan struct{}
-	proxyProbeURL      string
+	// shutdown 通知所有后台 goroutine 退出。
+	shutdown      chan struct{}
+	shutdownOnce  sync.Once
+	probeStop     chan struct{}
+	probeWake     chan struct{}
+	proxyProbeURL string
 }
 
 func New(cfg config.Config) *Server {
@@ -102,7 +105,7 @@ func New(cfg config.Config) *Server {
 	}
 	server := &Server{
 		cfg:                cfg,
-		auth:               auth.New(cfg.APIKey, cfg.AdminKey, cfg.AuthKeysPath, cfg.AllowAnonymous, repository),
+		auth:               auth.NewWithOptions(cfg.APIKey, cfg.AdminKey, cfg.AuthKeysPath, cfg.AllowAnonymous, repository, auth.Options{}),
 		store:              repository,
 		catalog:            model.Catalog(),
 		client:             &http.Client{Timeout: 0},
@@ -125,6 +128,7 @@ func New(cfg config.Config) *Server {
 		refreshProgress:    map[string]*accountRefreshProgress{},
 		survivalStatus:     map[string]any{"running": false, "last_started_at": "", "last_finished_at": "", "last_error": "", "last_summary": map[string]any{}, "next_run_at": ""},
 		survivalWake:       make(chan struct{}, 1),
+		shutdown:           make(chan struct{}),
 		probeStop:          make(chan struct{}),
 		probeWake:          make(chan struct{}, 1),
 		oauthStore:         oauth.NewStore(cfg.OAuthPath, firstNonEmpty(cfg.AdminKey, cfg.APIKey, "gptgrok2api")),
@@ -159,6 +163,18 @@ func New(cfg config.Config) *Server {
 		go server.openAISurvivalScheduler()
 	}
 	return server
+}
+
+// Shutdown 停止所有后台 goroutine（scheduler + task queue worker）。
+// 重复调用安全。
+func (s *Server) Shutdown() {
+	if s == nil {
+		return
+	}
+	s.shutdownOnce.Do(func() {
+		close(s.shutdown)
+		s.taskQueue.Stop()
+	})
 }
 
 func runtimeProxyGroups(groups []config.ProxyGroup) []proxyruntime.GroupConfig {
@@ -296,6 +312,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/accounts/oauth/finish", s.accountOAuthFinish)
 	mux.HandleFunc("/api/accounts/export", s.accountExport)
 	mux.HandleFunc("/api/accounts/import-api", s.importAccountsAPI)
+	mux.HandleFunc("/admin/api/tokens/add", s.legacyTokensAdd)
 	mux.HandleFunc("/api/accounts/agent-identities", s.agentIdentities)
 	mux.HandleFunc("/api/accounts/import-cleanup", s.cleanupImportedAbnormalAccounts)
 	mux.HandleFunc("/api/accounts/update", s.updateAccount)
@@ -341,7 +358,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/backup/test", s.backupTest)
 	mux.HandleFunc("/api/image-storage/test", s.imageStorageTest)
 	mux.HandleFunc("/api/image-storage/sync", s.imageStorageSync)
+	mux.HandleFunc("/api/icloud/bridge-status", s.icloudBridgeStatus)
 	mux.HandleFunc("/api/icloud/claim-status/sync", s.iCloudClaimStatusSync)
+	mux.HandleFunc("/api/icloud/", s.icloudProxy)
 	mux.HandleFunc("/api/images", s.adminImages)
 	mux.HandleFunc("/api/images/", s.adminImages)
 	mux.HandleFunc("/images/", s.publicImage)
@@ -377,9 +396,20 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key, X-Admin-Key")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		// 安全响应头：防御常见攻击向量
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// CSP：禁止内联脚本 + 限制资源来源（仅同源）
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -1138,6 +1168,32 @@ func (s *Server) adminAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeError(w, http.StatusNotFound, "admin endpoint not found", "not_found")
+}
+
+func (s *Server) legacyTokensAdd(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAccountImport(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed", "invalid_request_error")
+		return
+	}
+	var request struct {
+		Tokens []string `json:"tokens"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if len(request.Tokens) == 0 {
+		writeError(w, http.StatusBadRequest, "tokens are required", "invalid_request_error")
+		return
+	}
+	added, skipped, _, err := s.store.AddAccounts(request.Tokens, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error(), "server_error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"added": added, "skipped": skipped})
 }
 
 func (s *Server) proxyUpstream(w http.ResponseWriter, r *http.Request) {

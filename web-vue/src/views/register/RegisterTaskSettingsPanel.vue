@@ -1010,7 +1010,7 @@ async function testCheckoutProxy(stage: CheckoutProxyTestStage) {
       ...checkoutProxyTestResults.value,
       [stage]: result,
     }
-  } catch (error: any) {
+  } catch (error) {
     checkoutProxyTestResults.value = {
       ...checkoutProxyTestResults.value,
       [stage]: {
@@ -1141,7 +1141,7 @@ async function loadSub2APIRemoteGroups(serverId: string) {
     if (requestVersion !== sub2apiGroupRequestVersion) return
     sub2apiRemoteGroups.value = Array.isArray(response.groups) ? response.groups : []
     sub2apiLoadError.value = ''
-  } catch (error: any) {
+  } catch (error) {
     if (requestVersion !== sub2apiGroupRequestVersion) return
     sub2apiRemoteGroups.value = []
     sub2apiLoadError.value = error?.message || '加载 Sub2API 远端分组失败'
@@ -1159,7 +1159,7 @@ async function refreshSub2APIConnections() {
     const serverId = String(props.config.sub2api_sync.server_id || '').trim()
     if (serverId) await loadSub2APIRemoteGroups(serverId)
     else sub2apiRemoteGroups.value = []
-  } catch (error: any) {
+  } catch (error) {
     sub2apiServers.value = []
     sub2apiRemoteGroups.value = []
     sub2apiLoadError.value = error?.message || '加载 Sub2API 连接失败'
@@ -1174,7 +1174,7 @@ async function refreshOpenAICPAConnections() {
   try {
     const response = await accountImportsApi.listCPAPools()
     cpaPools.value = Array.isArray(response.pools) ? response.pools : []
-  } catch (error: any) {
+  } catch (error) {
     cpaPools.value = []
     openAICPALoadError.value = error?.message || '加载 CPA 连接失败'
   } finally {
@@ -1201,7 +1201,7 @@ async function loadOAuthDeliveryRemoteGroups(serverId: string) {
     oauthDeliveryRemoteGroups.value = (Array.isArray(response.groups) ? response.groups : [])
       .filter((group) => ['', 'xai', 'grok'].includes(String(group.platform || '').trim().toLowerCase()))
     oauthDeliveryLoadError.value = ''
-  } catch (error: any) {
+  } catch (error) {
     if (requestVersion !== oauthDeliveryGroupRequestVersion) return
     oauthDeliveryRemoteGroups.value = []
     oauthDeliveryLoadError.value = error?.message || '加载 Sub2API xAI 分组失败'

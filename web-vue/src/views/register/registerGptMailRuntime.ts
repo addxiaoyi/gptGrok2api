@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import { registerApi, type GptMailStatus, type RegisterProvider } from '@/api/register'
+import { errorMessage } from '@/lib/errorMessage'
 import type { PageRuntime } from '@/composables/usePageRuntime'
 import {
   formatClock,
@@ -161,8 +162,8 @@ export function useRegisterGptMailRuntime(input: RegisterGptMailRuntimeInput) {
       setState(index, { loading: false, error: '', data: response.status })
       if (options.reschedule !== false) scheduleRefresh(index, response.status)
       if (!options.silent) input.notifySuccess('GPTMail 状态已更新')
-    } catch (error: any) {
-      const message = error?.message || '获取 GPTMail 状态失败'
+    } catch (error) {
+      const message = errorMessage(error, '获取 GPTMail 状态失败')
       setState(index, { loading: false, error: message, data: previous })
       if (!options.silent) input.notifyError(message)
     }
@@ -174,8 +175,8 @@ export function useRegisterGptMailRuntime(input: RegisterGptMailRuntimeInput) {
       const response = await registerApi.refreshGptMailKey(sanitizedProviderPayload(provider), options.force ?? true)
       setState(index, { loading: false, error: '', data: response.status })
       if (options.reschedule !== false) scheduleRefresh(index, response.status)
-    } catch (error: any) {
-      const message = error?.message || '刷新 GPTMail 公共 Key 失败'
+    } catch (error) {
+      const message = errorMessage(error, '刷新 GPTMail 公共 Key 失败')
       setState(index, { loading: false, error: message, data: previous })
     }
   }

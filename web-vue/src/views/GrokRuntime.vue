@@ -199,6 +199,7 @@ import {
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useToast } from '@/composables/useToast'
 import { errorMessage } from '@/lib/errorMessage'
+import { formatTimestamp } from '@/lib/time'
 
 defineOptions({ name: 'GrokRuntime' })
 
@@ -227,7 +228,7 @@ const activeTokenAction = ref<TokenAction | null>(null)
 const configDirty = computed(() => configText.value !== configBaseline.value)
 const lastUpdatedText = computed(() => {
   if (!lastUpdatedAt.value) return '未获取'
-  return new Date(lastUpdatedAt.value).toLocaleString('zh-CN', { hour12: false })
+  return formatTimestamp(lastUpdatedAt.value)
 })
 const activeTokenCount = computed(() => tokens.value.filter((item) => String(item.status || '').toLowerCase() === 'active').length)
 const tokenSummaryText = computed(() => `共 ${tokens.value.length} 个 Token，正常 ${activeTokenCount.value} 个`)
@@ -341,17 +342,6 @@ function usageText(item: GrokRuntimeToken) {
   const success = Math.max(0, Number(item.use_count) || 0)
   const failed = Math.max(0, Number(item.fail_count) || 0)
   return `${success} / ${failed}`
-}
-
-function formatTimestamp(value: unknown) {
-  const raw = String(value || '').trim()
-  if (!raw) return '-'
-  const numeric = Number(raw)
-  const date = Number.isFinite(numeric) && numeric > 0
-    ? new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000)
-    : new Date(raw)
-  if (Number.isNaN(date.getTime())) return raw
-  return date.toLocaleString('zh-CN', { hour12: false })
 }
 
 function isTokenDisabled(item: GrokRuntimeToken) {

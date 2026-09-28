@@ -41,6 +41,8 @@ export function useGalleryQueryRuntime(options: GalleryQueryRuntimeOptions) {
 
   const tagOptions = computed(() => buildTagOptions(allTags.value))
 
+  // 只在首次或手动刷新时拉取 tags，避免每次搜索都触发
+  let tagsLoaded = false
   const galleryQuery = usePagedQuery({
     runtime: options.runtime,
     key: LOAD_REQUEST_KEY,
@@ -48,8 +50,8 @@ export function useGalleryQueryRuntime(options: GalleryQueryRuntimeOptions) {
     loading: isLoading,
     error: galleryLoadError,
     errorMessage: '加载图片管理失败',
-    fetch: ({ page, pageSize: size }) => Promise.all([
-      galleryApi.getFiles({
+    fetch: ({ page, pageSize: size }) => {
+      const filesPromise = galleryApi.getFiles({
         page: Number(size) ? page : 1,
         page_size: Number(size),
         media_type: 'all',
@@ -57,9 +59,16 @@ export function useGalleryQueryRuntime(options: GalleryQueryRuntimeOptions) {
         search: searchQuery.value,
         start_date: startDate.value,
         end_date: endDate.value,
-      }),
-      galleryApi.getTags().catch(() => allTags.value),
-    ]),
+      })
+      const tagsPromise = tagsLoaded
+        ? Promise.resolve(allTags.value)
+        : galleryApi.getTags().then((tags) => {
+            tagsLoaded = true
+            return tags
+          })
+          .catch(() => allTags.value)
+      return Promise.all([filesPromise, tagsPromise])
+    },
     resolvePage: ([data]) => data.page,
     resolvePageCount: ([data]) => data.page_count,
     resolveTotal: ([data]) => data.total,
@@ -104,6 +113,8 @@ export function useGalleryQueryRuntime(options: GalleryQueryRuntimeOptions) {
   }
 
   async function refreshAll() {
+    // 手动刷新时重置 tags 缓存，确保新增标签能同步
+    tagsLoaded = false
     await loadGallery()
   }
 

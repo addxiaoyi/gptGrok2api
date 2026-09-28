@@ -1,0 +1,44 @@
+# Grok Register (Python + Chromium)
+# Build: docker build -t grok-register -f integrations/Dockerfile.grok-register .
+# Run: docker compose -f integrations/docker-compose.yml up -d
+
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    python3-tk \
+    xdg-utils \
+    gettext-base \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    fonts-wqy-zenhei \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libasound2t64 \
+    libxkbcommon0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY integrations/grok-register/requirements.txt ./
+COPY integrations/grok-register/requirements-web.txt ./
+
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-web.txt
+
+COPY integrations/grok-register/ ./
+
+RUN mkdir -p /app/output /app/cpa_auths /app/logs \
+    && chmod 755 /app/output /app/cpa_auths /app/logs
+
+EXPOSE 8092
+
+CMD ["python", "-m", "web.server"]

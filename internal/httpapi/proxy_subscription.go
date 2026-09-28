@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -272,7 +273,7 @@ func (s *Server) applyProxySubscription(id, subscriptionURL string, proxyURLs []
 
 func (s *Server) recordProxySubscriptionError(id, subscriptionURL string, refreshErr error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, _ = s.store.MutateConfig("proxy_groups", func(value any) (any, error) {
+	if _, err := s.store.MutateConfig("proxy_groups", func(value any) (any, error) {
 		groups := mapList(value)
 		for index, current := range groups {
 			if stringValue(current["id"]) != id || strings.TrimSpace(stringValue(current["subscription_url"])) != subscriptionURL {
@@ -285,5 +286,7 @@ func (s *Server) recordProxySubscriptionError(id, subscriptionURL string, refres
 			break
 		}
 		return groups, nil
-	})
+	}); err != nil {
+		log.Printf("recordProxySubscriptionError: failed to persist error for group %s: %v", id, err)
+	}
 }
